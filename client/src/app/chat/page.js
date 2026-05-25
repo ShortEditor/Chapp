@@ -80,6 +80,7 @@ export default function ChatPage() {
   // Media upload states
   const [uploading, setUploading] = useState(false);
   const [pendingMedia, setPendingMedia] = useState(null); // { url, type, name }
+  const [previewImage, setPreviewImage] = useState(null); // Full-screen image preview
 
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -999,7 +1000,7 @@ export default function ChatPage() {
                                   src={msg.mediaUrl}
                                   alt="Attachment"
                                   style={{ maxHeight: '220px', width: '100%', objectFit: 'cover', borderRadius: '12px', cursor: 'pointer', display: 'block' }}
-                                  onClick={() => downloadFile(msg.mediaUrl, msg.id + '.jpg')}
+                                  onClick={() => setPreviewImage(msg.mediaUrl)}
                                 />
                                 <button
                                   onClick={() => downloadFile(msg.mediaUrl, msg.id + '.jpg')}
@@ -1311,6 +1312,80 @@ export default function ChatPage() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════
+          IMAGE LIGHTBOX PREVIEW MODAL
+          ═══════════════════════════════════════ */}
+      {previewImage && (
+        <div 
+          className="modal-overlay animate-fade-in" 
+          style={{ 
+            zIndex: 9999, 
+            background: 'rgba(0, 0, 0, 0.92)', 
+            backdropFilter: 'blur(10px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+          }}
+          onClick={() => setPreviewImage(null)}
+        >
+          <div 
+            className="animate-zoom-in"
+            style={{ 
+              position: 'relative', 
+              maxWidth: '90vw', 
+              maxHeight: '85vh',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Top Bar for close and download */}
+            <div style={{
+              position: 'absolute',
+              top: '-55px',
+              right: '0',
+              display: 'flex',
+              gap: '12px',
+              zIndex: 10000
+            }}>
+              <button
+                onClick={() => downloadFile(previewImage, 'download.jpg')}
+                className="p-2.5 rounded-full transition-all text-white bg-white/10 hover:bg-white/20 active:scale-95 cursor-pointer"
+                title="Download Image"
+              >
+                <Download className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => setPreviewImage(null)}
+                className="p-2.5 rounded-full transition-all text-white bg-white/10 hover:bg-white/20 active:scale-95 cursor-pointer"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <img
+              src={previewImage}
+              alt="Enlarged view"
+              style={{
+                maxWidth: '100%',
+                maxHeight: '80vh',
+                objectFit: 'contain',
+                borderRadius: '16px',
+                boxShadow: '0 25px 50px -12px rgba(0,0,0,0.7)',
+                border: '1px solid rgba(255,255,255,0.15)'
+              }}
+            />
           </div>
         </div>
       )}
