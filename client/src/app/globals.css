@@ -1,0 +1,186 @@
+@import "tailwindcss";
+
+:root {
+  --background: #060608;
+  --foreground: #f8fafc;
+  --card: rgba(13, 13, 17, 0.45);
+  --border: rgba(255, 255, 255, 0.06);
+  --cyan-glow: rgba(6, 182, 212, 0.15);
+  --indigo-glow: rgba(99, 102, 241, 0.15);
+}
+
+@theme {
+  --font-sans: var(--font-geist-sans), Inter, sans-serif;
+  --font-mono: var(--font-geist-mono), monospace;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+}
+
+/* -------------------------------------------------------------
+   GLASSMORPHISM & PREMIUM KITS
+   ------------------------------------------------------------- */
+
+.glass-panel {
+  background: rgba(13, 13, 18, 0.45);
+  backdrop-filter: blur(24px) saturate(120%);
+  -webkit-backdrop-filter: blur(24px) saturate(120%);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.15);
+}
+
+.glass-card-hover {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.glass-card-hover:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(6, 182, 212, 0.3);
+  box-shadow: 0 0 25px 0 rgba(6, 182, 212, 0.15);
+  transform: translateY(-2px);
+}
+
+.glass-input {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(8px);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.glass-input:focus {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(6, 182, 212, 0.5);
+  box-shadow: 0 0 15px 0 rgba(6, 182, 212, 0.15);
+  outline: none;
+}
+
+/* Chat bubble styling */
+.bubble-sender {
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.2) 0%, rgba(99, 102, 241, 0.2) 100%);
+  border: 1px solid rgba(6, 182, 212, 0.15);
+  box-shadow: 0 4px 15px 0 rgba(6, 182, 212, 0.05);
+  color: #f1f5f9;
+}
+
+.bubble-receiver {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(4px);
+  color: #f1f5f9;
+}
+
+/* -------------------------------------------------------------
+   NEON AMBIENT FLOATING ORBS
+   ------------------------------------------------------------- */
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  opacity: 0.18;
+  z-index: 0;
+  pointer-events: none;
+  animation: float 25s infinite alternate ease-in-out;
+}
+
+.orb-cyan {
+  background: radial-gradient(circle, #06b6d4 0%, #0891b2 70%);
+  width: 400px;
+  height: 400px;
+  top: 15%;
+  left: 10%;
+  animation-delay: 0s;
+}
+
+.orb-indigo {
+  background: radial-gradient(circle, #6366f1 0%, #4f46e5 70%);
+  width: 500px;
+  height: 500px;
+  bottom: 10%;
+  right: 10%;
+  animation-delay: -5s;
+}
+
+.orb-purple {
+  background: radial-gradient(circle, #a855f7 0%, #9333ea 70%);
+  width: 350px;
+  height: 350px;
+  top: 40%;
+  right: 25%;
+  animation-delay: -10s;
+}
+
+/* -------------------------------------------------------------
+   ANIMATIONS & SCROLLBAR OVERLAYS
+   ------------------------------------------------------------- */
+@keyframes float {
+  0% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+  }
+  33% {
+    transform: translate(30px, -40px) scale(1.15) rotate(120deg);
+  }
+  66% {
+    transform: translate(-40px, 20px) scale(0.9) rotate(240deg);
+  }
+  100% {
+    transform: translate(0, 0) scale(1) rotate(360deg);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Minimal Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(6, 182, 212, 0.4);
+}
+
+/* WebApp PWA Banner install animation */
+.pwa-pulse {
+  animation: pulseCyan 3s infinite;
+}
+
+@keyframes pulseCyan {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 15px 2px rgba(6, 182, 212, 0.15);
+  }
+}

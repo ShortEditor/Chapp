@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Next.js Build Folders
+.next/
+client/.next/
+client/out/
+
+# Environment Variables (Extremely Critical - Contains Firebase, Redis, Supabase credentials!)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+client/.env
+client/.env.local
+server/.env
+
+# Local Databases (SQLite fallback leftovers)
+*.db
+*.db-journal
+server/dev.db
+server/dev.db-journal
+
+# Uploaded media assets
+server/uploads/*
+!server/uploads/.gitkeep
+
+# System & OS leftovers
+.DS_Store
+Thumbs.db

@@ -1,0 +1,31 @@
+{
+  "name": "Chapp",
+  "short_name": "Chapp",
+  "description": "Privacy-focused realtime messaging platform where you own your conversations.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0c",
+  "theme_color": "#0a0a0c",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Open Chats",
+      "url": "/chat",
+      "description": "Jump straight into your conversations"
+    }
+  ]
+}

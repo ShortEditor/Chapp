@@ -1,0 +1,36 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  passwordHash String?
+  firebaseUid  String?  @unique
+  avatar       String?
+  bio          String?  @default("Hey there! I am using Chapp.")
+  status       String   @default("offline") // "online", "offline"
+  createdAt    DateTime @default(now())
+
+  // Relationships
+  sentRequests     Friendship[] @relation("SentFriendships")
+  receivedRequests Friendship[] @relation("ReceivedFriendships")
+}
+
+model Friendship {
+  id         String   @id @default(uuid())
+  senderId   String
+  receiverId String
+  status     String   @default("PENDING") // "PENDING", "ACCEPTED", "DECLINED"
+  createdAt  DateTime @default(now())
+
+  sender   User @relation("SentFriendships", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("ReceivedFriendships", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId])
+}

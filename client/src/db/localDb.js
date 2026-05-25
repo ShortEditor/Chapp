@@ -1,0 +1,15 @@
+import Dexie from 'dexie';
+
+// Initialize the local-first client Dexie database
+const db = new Dexie('ChappDatabase');
+
+// Define database schema
+// Database stores conversations and contacts only on the user's device.
+// Keys are defined as: primaryKey, index1, index2...
+db.version(1).stores({
+  friends: 'id, username, avatar, bio, status',
+  chats: 'friendId, lastMessageText, lastMessageTime, unreadCount',
+  messages: 'id, chatId, senderId, receiverId, text, mediaUrl, mediaType, timestamp, status'
+});
+
+export default db;
