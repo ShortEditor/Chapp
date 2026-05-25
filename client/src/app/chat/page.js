@@ -26,7 +26,8 @@ import {
   Plus,
   X,
   Sparkles,
-  Info
+  Info,
+  ArrowLeft
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -387,7 +388,7 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#070709] relative z-10">
+    <div className="flex h-[100dvh] overflow-hidden bg-[#070709] relative z-10">
       {/* Ambient glowing background particles */}
       <div className="orb orb-cyan"></div>
       <div className="orb orb-indigo"></div>
@@ -395,7 +396,7 @@ export default function ChatPage() {
       {/* -------------------------------------------------------------
          SIDEBAR (LEFT PANEL)
          ------------------------------------------------------------- */}
-      <div className="w-[360px] h-full flex flex-col border-r border-white/5 glass-panel z-10 shrink-0 select-none">
+      <div className={`w-full md:w-[360px] h-full flex flex-col border-r border-white/5 glass-panel z-10 shrink-0 select-none ${activeFriend ? 'hidden md:flex' : 'flex'}`}>
         
         {/* User Card Header */}
         <div className="p-4 border-b border-white/5 flex items-center justify-between">
@@ -689,13 +690,20 @@ export default function ChatPage() {
       {/* -------------------------------------------------------------
          CHAT PANEL (RIGHT PANEL)
          ------------------------------------------------------------- */}
-      <div className="flex-1 h-full flex flex-col bg-[#08080a]/30 backdrop-blur-3xl relative z-10">
+      <div className={`flex-1 h-full flex flex-col bg-[#08080a]/30 backdrop-blur-3xl relative z-10 ${!activeFriend ? 'hidden md:flex' : 'flex'}`}>
         
         {activeFriend ? (
           <>
             {/* Active Chat Header */}
-            <div className="h-16 border-b border-white/5 px-6 flex items-center justify-between select-none bg-black/10 z-10 shrink-0">
+            <div className="h-16 border-b border-white/5 px-4 md:px-6 flex items-center justify-between select-none bg-black/10 z-10 shrink-0">
               <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setActiveFriend(null)}
+                  className="md:hidden p-2 -ml-1 rounded-xl border border-white/5 hover:border-cyan-500/20 hover:bg-white/5 text-slate-400 hover:text-cyan-400 transition-all duration-300 mr-1"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
                 <div className="relative">
                   <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center font-bold text-sm border border-white/10 uppercase text-slate-200 overflow-hidden shrink-0">
                     {activeFriend.avatar?.startsWith('http') ? (
@@ -722,7 +730,7 @@ export default function ChatPage() {
             </div>
 
             {/* Message History Feed */}
-            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4">
+            <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 md:py-6 space-y-4">
               {messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-slate-500 text-center select-none">
                   <Sparkles className="w-8 h-8 opacity-20 mb-2 animate-bounce" />
@@ -736,7 +744,7 @@ export default function ChatPage() {
                   return (
                     <div
                       key={msg.id}
-                      className={`flex flex-col max-w-[70%] animate-slide-up ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'}`}
+                      className={`flex flex-col max-w-[85%] md:max-w-[70%] animate-slide-up ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'}`}
                     >
                       {/* Message Bubble */}
                       <div
@@ -812,7 +820,7 @@ export default function ChatPage() {
             </div>
 
             {/* Input Bar Section */}
-            <div className="p-4 border-t border-white/5 bg-black/5 shrink-0 z-10">
+            <div className="p-3 md:p-4 border-t border-white/5 bg-black/5 shrink-0 z-10">
 
               {/* Connection status warning */}
               {!isConnected && (
