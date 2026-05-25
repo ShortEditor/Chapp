@@ -1,68 +1,93 @@
-# Chapp — Privacy-First Realtime Messaging PWA
+# Chapp — Privacy-First Realtime Messaging Monorepo
 
-Chapp is a sleek, modern, cinematic, and privacy-focused messaging platform where **users fully own their conversations**. 
+Chapp is a sleek, modern, and privacy-focused messaging application designed around a **zero-server message storage philosophy**. Users completely own their conversation logs, saved in local-first database models directly inside their browser's IndexedDB.
 
-### 🛡️ Privacy Architecture:
-* **Zero Server Storage**: Chats, messages, and contacts are stored exclusively inside the user's browser-based **IndexedDB** using **Dexie.js**.
-* **Temporary Queue**: The server acts strictly as a transport layer. If a recipient is offline, messages are queued temporarily in **Upstash Redis** (with an automatic 7-day TTL expiration). Upon delivery, messages are immediately purged from the server database/queue.
-* **Ephemeral Media sharing**: Attachments are uploaded to the backend server and auto-deleted by a background cron-worker after 24 hours. The client downloads them instantly and caches them as binary Blobs locally in IndexedDB.
+## 📐 System Architecture & Flowchart
 
----
+The overall architecture, data-flow pipelines, and security layers are structured as follows:
 
-## 🚀 Step 1: External Services Setup Guide
+![Chapp System Architecture Flowchart](file:///C:/Users/Admin/.gemini/antigravity/brain/4433129b-6e23-4278-9ee6-601212a12483/chapp_flowchart_1779708950428.png)
 
-Chapp leverages three free-tier services to maintain scalability and low costs. Set them up using the guidelines below:
+```mermaid
+flowchart TD
+    subgraph Client App [Next.js Client - Local-First]
+        A[(IndexedDB / Dexie.js)]
+        B[Web Crypto API]
+        C[PWA Service Worker]
+        D[Next.js UI & WebSockets]
+    end
 
-### 1. Supabase (Persistent Database)
-Supabase hosts user profiles and friend relationships.
-1. Sign up/Log in at [Supabase](https://supabase.com).
-2. Create a new free project (choose a database password and save it).
-3. Once the database is ready, go to **Project Settings** ➔ **Database** ➔ **Connection String** ➔ **URI**.
-4. Copy the connection string. It will look like this:
-   `postgresql://postgres:[YOUR-PASSWORD]@db.xxxxxx.supabase.co:5432/postgres?pgbouncer=true`
-5. Keep this URL ready for the **Server Environment Config**.
+    subgraph Transport [Transit / Relay]
+        E{Socket.IO Server}
+    end
 
-### 2. Firebase Console (Google Authentication)
-Firebase handles secure, passwordless one-click "Continue with Google" sign-in.
-1. Sign up/Log in at [Firebase Console](https://console.firebase.google.com).
-2. Click **Add Project** and follow the prompt (Google Analytics can be disabled).
-3. Once created, click the **Web icon (</>)** in the center of your project dashboard to register a new Web App (name it `Chapp`).
-4. Copy the initialized `firebaseConfig` object containing:
-   * `apiKey`, `authDomain`, `projectId`, `storageBucket`, `messagingSenderId`, `appId`.
-5. In the left sidebar of the Firebase console, go to **Build** ➔ **Authentication** ➔ click **Get Started**.
-6. Under the **Sign-in method** tab, click **Google** ➔ enable it ➔ choose a project support email ➔ click **Save**.
-7. Keep these keys ready for the **Client Environment Config**.
+    subgraph Server Cloud [Node.js Backend & Storage]
+        F[(Upstash Redis Queue)]
+        G[(Supabase PostgreSQL)]
+        H[Hourly Media Cleanup Worker]
+    end
 
-### 3. Upstash (Temporary Redis Queue)
-Upstash Redis queues offline messages temporarily.
-1. Sign up/Log in at [Upstash Console](https://console.upstash.com).
-2. Under the **Redis** tab, click **Create Database** (Select standard free tier, select region closest to you).
-3. Scroll down to the **Connection Details** section, locate the **UPSTASH_REDIS_REST_URL** or **REDIS_URL**.
-4. Copy the `rediss://...` connection string.
-5. Keep this URL ready for the **Server Environment Config**.
+    D -- 1. Sends Chat --> E
+    E -- 2a. Recipient Online: Relay Message --> D
+    E -- 2b. Recipient Offline: Buffer Set (7-Day TTL) --> F
+    F -- 3. Recipient Log In: Drain & Deliver --> D
+    
+    A -- 4. Local Database Dump --> B
+    B -- 5. PBKDF2 + AES-GCM Encryption --> B
+    B -- 6. Sync Encrypted Backup Payload --> G
+    G -- 7. Fetch & Decrypt with Password --> B
+    B -- 8. Merge Restored Data --> A
+```
 
 ---
 
-## ⚙️ Step 2: Environment Configurations
+## 🛡️ Privacy & Technical Features
+
+1. **Zero-Server Storage Philosophy**:
+   - The Express backend serves as a transient memory pipe. When a message is sent, the server relays it to the online recipient and deletes it instantly.
+   - If a recipient is offline, messages are stored in Upstash Redis as temporary queues with a **7-Day TTL (automatic deletion)**. They are popped and written to the client's local database the moment the recipient logs in.
+
+2. **Zero-Knowledge Cloud Backup**:
+   - Chat logs can be backed up to the cloud securely. The client uses the native browser **Web Crypto API** (`SubtleCrypto`) to encrypt the IndexedDB payload locally using a user-defined passphrase.
+   - We derive a 256-bit AES-GCM key using `PBKDF2` (SHA-256, 100,000 iterations, random 16-byte salt) and encrypt the data with `AES-GCM` (random 12-byte IV).
+   - The server only stores the string `saltHex:ivHex:ciphertextBase64` inside PostgreSQL. The server never sees your password and cannot decrypt your chats.
+
+3. **Offline-First Dexie.js Database**:
+   - Chats, messages, and friend relationships are stored locally in the browser's IndexedDB.
+
+4. **Double-Checkmark Delivery Ticks**:
+   - `sending` ➔ Gray Clock.
+   - `delivered` ➔ Single Gray Tick (reaches server/Redis queue).
+   - `ack` ➔ Neon Cyan Double Tick (written to recipient's local DB).
+
+5. **PWA Integration**:
+   - Install prompt banners, offline caching, andStandalone viewport windows.
+
+6. **Mobile UI Optimizations**:
+   - Responsive layout splits toggling automatically between sidebar lists and active chats. Includes native navigation controls and dynamic sizing (`100dvh`).
+
+---
+
+## ⚙️ Monorepo Configurations
 
 Create and fill the `.env` files in both directories:
 
 ### A. Backend Configuration: `/server/.env`
-Create a `.env` file inside the `server/` directory and configure the variables:
+Create a `.env` file inside the `server/` directory:
 ```env
 PORT=5000
-DATABASE_URL="YOUR_SUPABASE_CONNECTION_STRING_HERE"
+DATABASE_URL="postgresql://postgres:[YOUR-PASSWORD]@db.xxxxxx.supabase.co:5432/postgres?pgbouncer=true"
 JWT_SECRET="generate_a_random_secure_secret_string"
 REDIS_URL="YOUR_UPSTASH_REDIS_CONNECTION_STRING_HERE"
 FIREBASE_PROJECT_ID="YOUR_FIREBASE_PROJECT_ID_HERE"
 ```
 
 ### B. Frontend Configuration: `/client/.env`
-Create a `.env` file inside the `client/` directory and configure the variables:
+Create a `.env` file inside the `client/` directory:
 ```env
-NEXT_PUBLIC_BACKEND_URL="http://localhost:5000"
+NEXT_PUBLIC_BACKEND_URL="https://chapp-oxa7.onrender.com"
 
-# Firebase Client SDK Configuration
+# Firebase Client SDK Configuration (Optional - Falls back to Demo Mode if empty)
 NEXT_PUBLIC_FIREBASE_API_KEY="your-api-key"
 NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN="your-auth-domain"
 NEXT_PUBLIC_FIREBASE_PROJECT_ID="your-project-id"
@@ -70,36 +95,32 @@ NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET="your-storage-bucket"
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID="your-sender-id"
 NEXT_PUBLIC_FIREBASE_APP_ID="your-app-id"
 ```
-*(Note: If the Firebase variables are left blank, Chapp will automatically load in **Developer Demo Mode** to allow local sign-ins without Google popup errors).*
 
 ---
 
-## 📦 Step 3: Run the Application
+## 🚀 Running the Application Locally
 
-### 1. Initialize and Start the Backend
+### 1. Start the Express Backend
 Open a terminal in the `/server` folder:
 ```bash
-# Install server dependencies
+# Install dependencies
 npm install
 
-# Push database schema to Supabase and generate Prisma client
+# Push database schema to Supabase & generate client
 npx prisma db push
 
-# Start backend in development mode (nodemon hot reloading)
+# Start server in development mode
 npm run dev
 ```
-* **Endpoint:** `http://localhost:5000`
-* Check the logs to verify it successfully connects to Supabase and Upstash Redis.
 
 ### 2. Start the Next.js Frontend
-Open a new, separate terminal in the `/client` folder:
+Open a separate terminal in the `/client` folder:
 ```bash
-# Install client dependencies
+# Install dependencies
 npm install
 
-# Start Next.js development server
+# Start development server
 npm run dev
 ```
-* **Endpoint:** [http://localhost:3000](http://localhost:3000)
 
-Open [http://localhost:3000](http://localhost:3000) in your browser to start chatting securely and install Chapp as a PWA!
+Open [http://localhost:3000](http://localhost:3000) in your browser and start chatting securely!
