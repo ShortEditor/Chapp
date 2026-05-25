@@ -1155,20 +1155,26 @@ export default function ChatPage() {
               </div>
 
               {/* Call Trigger Button */}
-              {onlineFriends.get(activeFriend.id) === 'online' && (
-                <button
-                  onClick={() => initiateCall(activeFriend.id, activeFriend.username)}
-                  className="p-2.5 rounded-full transition-all hover:scale-105 active:scale-95 cursor-pointer shrink-0 flex items-center justify-center"
-                  style={{ 
-                    background: 'var(--primary-light)', 
-                    color: 'var(--primary)',
-                    border: '1px solid var(--primary-container)'
-                  }}
-                  title="Start Voice Call"
-                >
-                  <Phone className="w-4 h-4" />
-                </button>
-              )}
+              <button
+                onClick={() => {
+                  const isOnline = onlineFriends.get(activeFriend.id) === 'online';
+                  if (isOnline) {
+                    initiateCall(activeFriend.id, activeFriend.username);
+                  } else {
+                    alert(`${activeFriend.username} is currently offline. You can only call friends who are active and online!`);
+                  }
+                }}
+                className="p-2.5 rounded-full transition-all hover:scale-105 active:scale-95 cursor-pointer shrink-0 flex items-center justify-center"
+                style={{ 
+                  background: onlineFriends.get(activeFriend.id) === 'online' ? 'var(--primary-light)' : 'var(--border-light)', 
+                  color: onlineFriends.get(activeFriend.id) === 'online' ? 'var(--primary)' : 'var(--text-subtle)',
+                  border: `1px solid ${onlineFriends.get(activeFriend.id) === 'online' ? 'var(--primary-container)' : 'var(--border)'}`,
+                  opacity: onlineFriends.get(activeFriend.id) === 'online' ? 1 : 0.7
+                }}
+                title={onlineFriends.get(activeFriend.id) === 'online' ? "Start Voice Call" : `${activeFriend.username} is offline`}
+              >
+                <Phone className="w-4 h-4" />
+              </button>
             </div>
 
             {/* Messages Feed */}
