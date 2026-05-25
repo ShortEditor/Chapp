@@ -56,6 +56,7 @@ export default function ChatPage() {
   const [friendRequestMessage, setFriendRequestMessage] = useState({ text: '', type: '' });
   const [isPwaInstallable, setIsPwaInstallable] = useState(false);
   const [pendingRequests, setPendingRequests] = useState([]);
+  const [sendError, setSendError] = useState('');
   
   // Profile settings editor modal state
   const [showSettings, setShowSettings] = useState(false);
@@ -314,13 +315,26 @@ export default function ChatPage() {
     e.preventDefault();
     if (!inputText.trim() && !pendingMedia) return;
 
-    // Send via socket (updates Dexie local DB instantly inside provider)
-    await sendMessage(
+    // Guard: socket must be connected
+    if (!isConnected) {
+      setSendError('Not connected to server. Please wait or refresh the page.');
+      setTimeout(() => setSendError(''), 4000);
+      return;
+    }
+
+    setSendError('');
+    const result = await sendMessage(
       activeFriend.id,
       inputText.trim(),
       pendingMedia?.url || null,
       pendingMedia?.type || null
     );
+
+    if (!result) {
+      setSendError('Failed to send. Socket may have disconnected — retrying...');
+      setTimeout(() => setSendError(''), 4000);
+      return;
+    }
 
     // Reset states
     setInputText('');
@@ -799,6 +813,22 @@ export default function ChatPage() {
 
             {/* Input Bar Section */}
             <div className="p-4 border-t border-white/5 bg-black/5 shrink-0 z-10">
+
+              {/* Connection status warning */}
+              {!isConnected && (
+                <div className="mb-3 px-4 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs flex items-center gap-2 animate-pulse">
+                  <div className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+                  Connecting to server... Messages will send once connected.
+                </div>
+              )}
+
+              {/* Send error message */}
+              {sendError && (
+                <div className="mb-3 px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-red-400 shrink-0" />
+                  {sendError}
+                </div>
+              )}
               
               {/* Preview Pending File Upload */}
               {pendingMedia && (
@@ -860,8 +890,9 @@ export default function ChatPage() {
 
                 <button
                   type="submit"
-                  disabled={!inputText.trim() && !pendingMedia}
-                  className="p-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-[#070709] transition-all duration-300 shrink-0 disabled:opacity-50 shadow-md shadow-cyan-500/25 active:scale-95"
+                  disabled={(!inputText.trim() && !pendingMedia) || !isConnected}
+                  className="p-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-[#070709] transition-all duration-300 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-cyan-500/25 active:scale-95"
+                  title={!isConnected ? 'Connecting to server...' : 'Send message'}
                 >
                   <Send className="w-4.5 h-4.5" />
                 </button>

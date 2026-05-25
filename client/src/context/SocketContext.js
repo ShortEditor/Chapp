@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { io } from 'socket.io-client';
 import db from '../db/localDb';
 
@@ -9,180 +9,143 @@ const SocketContext = createContext(null);
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
 export function SocketProvider({ children }) {
-  const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [typingFriends, setTypingFriends] = useState(new Set());
-  const [onlineFriends, setOnlineFriends] = useState(new Map()); // friendId -> 'online' | 'offline'
+  const [onlineFriends, setOnlineFriends] = useState(new Map());
 
-  // Ref to track active chat in realtime inside socket callbacks
-  const activeChatRef = React.useRef(null);
+  // Use a ref for the socket so callbacks always access the latest instance
+  // without stale closure bugs from useState
+  const socketRef = useRef(null);
+  const activeChatRef = useRef(null);
 
-  // Set active chat friend ID (so we know when to increment unread count or reset it to 0)
+  // Expose socket state for components that need to check connection
+  const [socket, setSocket] = useState(null);
+
   const setActiveChat = useCallback((friendId) => {
     activeChatRef.current = friendId;
     if (friendId) {
-      // Clear unread count for this active chat in local DB
       db.chats.update(friendId, { unreadCount: 0 }).catch(() => {});
     }
   }, []);
 
-  // Initialize and connect socket using our local session JWT
   const connectSocket = useCallback((token) => {
-    // Allow reconnect if previous socket disconnected/failed
-    if (socket && socket.connected) return;
+    // Don't reconnect if already connected
+    if (socketRef.current && socketRef.current.connected) {
+      console.log('⚡ [SocketContext] Already connected, skipping reconnect.');
+      return;
+    }
 
-    console.log('⚡ [SocketContext] Connecting to server...', BACKEND_URL);
+    // Disconnect stale socket before creating new one
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+    }
+
+    console.log('⚡ [SocketContext] Connecting to:', BACKEND_URL);
+
     const newSocket = io(BACKEND_URL, {
       auth: { token },
-      transports: ['polling', 'websocket'], // polling first for Render compatibility, then upgrades to WS
-      reconnectionAttempts: 15,
+      transports: ['polling', 'websocket'], // polling first → upgrades to WS (required for Render)
+      reconnectionAttempts: 20,
       reconnectionDelay: 2000,
-      timeout: 20000
+      timeout: 20000,
     });
 
     newSocket.on('connect', () => {
-      console.log('⚡ [SocketContext] Connected to websocket server.');
+      console.log('✅ [SocketContext] Connected! Socket ID:', newSocket.id);
       setIsConnected(true);
     });
 
     newSocket.on('disconnect', (reason) => {
-      console.log('⚡ [SocketContext] Disconnected from websocket server. Reason:', reason);
+      console.warn('⚡ [SocketContext] Disconnected. Reason:', reason);
       setIsConnected(false);
       setTypingFriends(new Set());
     });
 
     newSocket.on('connect_error', (err) => {
-      console.error('❌ [SocketContext] Socket connection error:', err.message);
+      console.error('❌ [SocketContext] Connection error:', err.message, '| Backend:', BACKEND_URL);
+      setIsConnected(false);
     });
 
-    // 1. RECEIVE REALTIME MESSAGE
+    // RECEIVE REALTIME MESSAGE
     newSocket.on('receive-message', async (message) => {
       const { id, senderId, receiverId, text, mediaUrl, mediaType, timestamp } = message;
-      console.log(`💬 [SocketContext] Received realtime message from ${senderId}`);
-
       try {
-        // Write message to local IndexedDB (set status to 'ack' immediately because we received it!)
         await db.messages.put({
-          id,
-          chatId: senderId,
-          senderId,
-          receiverId,
-          text,
-          mediaUrl,
-          mediaType,
-          timestamp,
-          status: 'ack'
+          id, chatId: senderId, senderId, receiverId,
+          text, mediaUrl, mediaType, timestamp, status: 'ack'
         });
 
-        // If receiver is currently viewing this chat, don't increment unread count
         const isActiveChat = activeChatRef.current === senderId;
         const existingChat = await db.chats.get(senderId);
 
-        // Update or create chat in sidebar list
         await db.chats.put({
           friendId: senderId,
-          lastMessageText: text || (mediaType === 'image' ? '📷 Photo' : mediaType === 'video' ? '🎥 Video' : '📁 Document'),
+          lastMessageText: text || (mediaType === 'image' ? '📷 Photo' : mediaType === 'video' ? '🎥 Video' : '📁 File'),
           lastMessageTime: timestamp,
           unreadCount: isActiveChat ? 0 : (existingChat?.unreadCount || 0) + 1
         });
 
-        // Send ACK back to server so sender gets their double tick
         newSocket.emit('message-ack', { id, senderId });
-
       } catch (err) {
-        console.error('❌ [SocketContext] Error writing message to Dexie:', err);
+        console.error('❌ [SocketContext] Error writing message to DB:', err);
       }
     });
 
-    // 2. RECEIVE OFFLINE MESSAGES IN BATCH (delivered when user comes online)
+    // RECEIVE OFFLINE BATCH
     newSocket.on('deliver-offline-messages', async (messages) => {
-      console.log(`📦 [SocketContext] Received batch of ${messages.length} offline messages.`);
-      
       const ackIds = [];
-
       try {
         for (const msg of messages) {
           const { id, senderId, receiverId, text, mediaUrl, mediaType, timestamp } = msg;
-          
-          // Write to local IndexedDB
           await db.messages.put({
-            id,
-            chatId: senderId,
-            senderId,
-            receiverId,
-            text,
-            mediaUrl,
-            mediaType,
-            timestamp,
-            status: 'ack'
+            id, chatId: senderId, senderId, receiverId,
+            text, mediaUrl, mediaType, timestamp, status: 'ack'
           });
 
-          // Sync unread & chat list
           const isActiveChat = activeChatRef.current === senderId;
           const existingChat = await db.chats.get(senderId);
-
           await db.chats.put({
             friendId: senderId,
-            lastMessageText: text || (mediaType === 'image' ? '📷 Photo' : mediaType === 'video' ? '🎥 Video' : '📁 Document'),
+            lastMessageText: text || (mediaType === 'image' ? '📷 Photo' : mediaType === 'video' ? '🎥 Video' : '📁 File'),
             lastMessageTime: timestamp,
             unreadCount: isActiveChat ? 0 : (existingChat?.unreadCount || 0) + 1
           });
-
           ackIds.push({ id, senderId });
         }
 
-        // Send a bulk acknowledgment back to server to clear Redis queue and update senders' double ticks
         if (ackIds.length > 0) {
           newSocket.emit('offline-messages-ack', { messageIds: ackIds });
         }
-
       } catch (err) {
         console.error('❌ [SocketContext] Error processing offline batch:', err);
       }
     });
 
-    // 3. MESSAGE STATUS UPDATE (single check -> double check)
-    newSocket.on('message-status', async (data) => {
-      const { id, status } = data;
-      console.log(`✏️ [SocketContext] Message status updated: ${id} ➔ ${status}`);
+    // MESSAGE STATUS UPDATE
+    newSocket.on('message-status', async ({ id, status }) => {
       try {
         await db.messages.update(id, { status });
-      } catch (err) {
-        // message might not be in our DB (e.g. if cleared, ignore)
-      }
+      } catch (_) {}
     });
 
-    // 4. FRIEND PRESENCE UPDATES
-    newSocket.on('friend-status-changed', async (data) => {
-      const { userId, status } = data;
-      console.log(`👤 [SocketContext] Friend presence: userId ${userId} is now ${status}`);
-      
+    // FRIEND PRESENCE
+    newSocket.on('friend-status-changed', async ({ userId, status }) => {
       setOnlineFriends(prev => {
         const next = new Map(prev);
         next.set(userId, status);
         return next;
       });
-
-      // Update in local Dexie database for persistence
       try {
         await db.friends.update(userId, { status });
-      } catch (err) {
-        // Friend might not be fully synced in local DB yet
-      }
+      } catch (_) {}
     });
 
-    // 5. TYPING INDICATORS
-    newSocket.on('typing-start', (data) => {
-      const { senderId } = data;
-      setTypingFriends(prev => {
-        const next = new Set(prev);
-        next.add(senderId);
-        return next;
-      });
+    // TYPING
+    newSocket.on('typing-start', ({ senderId }) => {
+      setTypingFriends(prev => new Set([...prev, senderId]));
     });
 
-    newSocket.on('typing-stop', (data) => {
-      const { senderId } = data;
+    newSocket.on('typing-stop', ({ senderId }) => {
       setTypingFriends(prev => {
         const next = new Set(prev);
         next.delete(senderId);
@@ -190,40 +153,47 @@ export function SocketProvider({ children }) {
       });
     });
 
+    // friendship accepted - refresh friends list
+    newSocket.on('friendship-accepted', () => {
+      // Components can listen to this via the socket ref
+    });
+
+    socketRef.current = newSocket;
     setSocket(newSocket);
   }, []);
 
-  // Disconnect socket connection
   const disconnectSocket = useCallback(() => {
-    if (socket) {
-      console.log('⚡ [SocketContext] Explicit socket disconnection.');
-      socket.disconnect();
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
       setSocket(null);
       setIsConnected(false);
       setTypingFriends(new Set());
     }
-  }, [socket]);
+  }, []);
 
-  // Clean up socket on unmount
+  // Clean up on unmount
   useEffect(() => {
     return () => {
-      if (socket) {
-        socket.disconnect();
+      if (socketRef.current) {
+        socketRef.current.disconnect();
       }
     };
-  }, [socket]);
+  }, []);
 
-  // Send message helper
+  // SEND MESSAGE — uses ref so never has stale socket
   const sendMessage = useCallback(async (receiverId, text, mediaUrl = null, mediaType = null) => {
-    if (!socket || !isConnected) {
-      console.warn('⚠️ [SocketContext] Cannot send message: Socket disconnected.');
+    const activeSocket = socketRef.current;
+
+    if (!activeSocket || !activeSocket.connected) {
+      console.warn('⚠️ [SocketContext] Cannot send: socket not connected. Connected:', activeSocket?.connected, 'URL:', BACKEND_URL);
       return null;
     }
 
     const messageId = crypto.randomUUID();
     const timestamp = Date.now();
-
     const currentUser = JSON.parse(localStorage.getItem('chapp_user') || '{}');
+
     const localMessage = {
       id: messageId,
       chatId: receiverId,
@@ -233,23 +203,19 @@ export function SocketProvider({ children }) {
       mediaUrl,
       mediaType,
       timestamp,
-      status: 'sending' // Local starts as sending (clock icon)
+      status: 'sending'
     };
 
     try {
-      // 1. Save to local IndexedDB instantly
       await db.messages.put(localMessage);
-
-      // 2. Create/Update Chat row in local DB for sidebar tracking
       await db.chats.put({
         friendId: receiverId,
-        lastMessageText: text || (mediaType === 'image' ? '📷 Photo' : mediaType === 'video' ? '🎥 Video' : '📁 Document'),
+        lastMessageText: text || (mediaType === 'image' ? '📷 Photo' : mediaType === 'video' ? '🎥 Video' : '📁 File'),
         lastMessageTime: timestamp,
-        unreadCount: 0 // We sent this, so 0 unread
+        unreadCount: 0
       });
 
-      // 3. Emit message over websocket
-      socket.emit('send-message', {
+      activeSocket.emit('send-message', {
         id: messageId,
         receiverId,
         text,
@@ -258,20 +224,19 @@ export function SocketProvider({ children }) {
         timestamp
       });
 
+      console.log('📤 [SocketContext] Message sent:', messageId);
       return localMessage;
-
     } catch (err) {
-      console.error('❌ [SocketContext] Failed to send message locally:', err);
+      console.error('❌ [SocketContext] Failed to send message:', err);
       return null;
     }
-  }, [socket, isConnected]);
+  }, []); // No deps — always reads from socketRef directly
 
-  // Trigger typing events
   const emitTyping = useCallback((receiverId, isTyping) => {
-    if (!socket || !isConnected) return;
-    const event = isTyping ? 'typing-start' : 'typing-stop';
-    socket.emit(event, { receiverId });
-  }, [socket, isConnected]);
+    const activeSocket = socketRef.current;
+    if (!activeSocket || !activeSocket.connected) return;
+    activeSocket.emit(isTyping ? 'typing-start' : 'typing-stop', { receiverId });
+  }, []);
 
   return (
     <SocketContext.Provider
@@ -285,7 +250,8 @@ export function SocketProvider({ children }) {
         disconnectSocket,
         sendMessage,
         emitTyping,
-        setActiveChat
+        setActiveChat,
+        socketRef,
       }}
     >
       {children}
