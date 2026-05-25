@@ -28,14 +28,16 @@ export function SocketProvider({ children }) {
 
   // Initialize and connect socket using our local session JWT
   const connectSocket = useCallback((token) => {
-    if (socket) return;
+    // Allow reconnect if previous socket disconnected/failed
+    if (socket && socket.connected) return;
 
     console.log('⚡ [SocketContext] Connecting to server...', BACKEND_URL);
     const newSocket = io(BACKEND_URL, {
       auth: { token },
-      transports: ['websocket'], // force pure WSS for scalability
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000
+      transports: ['polling', 'websocket'], // polling first for Render compatibility, then upgrades to WS
+      reconnectionAttempts: 15,
+      reconnectionDelay: 2000,
+      timeout: 20000
     });
 
     newSocket.on('connect', () => {
@@ -43,10 +45,14 @@ export function SocketProvider({ children }) {
       setIsConnected(true);
     });
 
-    newSocket.on('disconnect', () => {
-      console.log('⚡ [SocketContext] Disconnected from websocket server.');
+    newSocket.on('disconnect', (reason) => {
+      console.log('⚡ [SocketContext] Disconnected from websocket server. Reason:', reason);
       setIsConnected(false);
       setTypingFriends(new Set());
+    });
+
+    newSocket.on('connect_error', (err) => {
+      console.error('❌ [SocketContext] Socket connection error:', err.message);
     });
 
     // 1. RECEIVE REALTIME MESSAGE
