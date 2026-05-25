@@ -18,6 +18,10 @@ model User {
   status       String   @default("offline") // "online", "offline"
   createdAt    DateTime @default(now())
 
+  // Zero-Knowledge Encrypted Backup
+  encryptedBackup String?
+  backupUpdatedAt DateTime?
+
   // Relationships
   sentRequests     Friendship[] @relation("SentFriendships")
   receivedRequests Friendship[] @relation("ReceivedFriendships")

@@ -454,6 +454,54 @@ app.put('/api/users/profile', authenticateToken, async (req, res) => {
   }
 });
 
+// GET user's encrypted backup
+app.get('/api/backup', authenticateToken, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: {
+        encryptedBackup: true,
+        backupUpdatedAt: true
+      }
+    });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json({
+      encryptedBackup: user.encryptedBackup,
+      backupUpdatedAt: user.backupUpdatedAt
+    });
+  } catch (err) {
+    console.error('❌ [Backup GET] Error:', err.message);
+    res.status(500).json({ error: 'Server error retrieving backup' });
+  }
+});
+
+// POST update user's encrypted backup
+app.post('/api/backup', authenticateToken, async (req, res) => {
+  try {
+    const { encryptedBackup } = req.body;
+    if (encryptedBackup === undefined) {
+      return res.status(400).json({ error: 'encryptedBackup payload is required' });
+    }
+    const updated = await prisma.user.update({
+      where: { id: req.user.id },
+      data: {
+        encryptedBackup,
+        backupUpdatedAt: new Date()
+      },
+      select: {
+        backupUpdatedAt: true
+      }
+    });
+    res.json({
+      message: 'Backup updated successfully',
+      backupUpdatedAt: updated.backupUpdatedAt
+    });
+  } catch (err) {
+    console.error('❌ [Backup POST] Error:', err.message);
+    res.status(500).json({ error: 'Server error saving backup' });
+  }
+});
+
 // fetch all friends (accepted and pending)
 app.get('/api/friends', authenticateToken, async (req, res) => {
   try {

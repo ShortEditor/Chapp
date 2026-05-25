@@ -27,9 +27,14 @@ import {
   X,
   Sparkles,
   Info,
-  ArrowLeft
+  ArrowLeft,
+  Database,
+  Key,
+  Lock,
+  RefreshCw
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { encryptData, decryptData } from '@/lib/crypto';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
@@ -64,6 +69,13 @@ export default function ChatPage() {
   const [editBio, setEditBio] = useState('');
   const [editAvatar, setEditAvatar] = useState('');
   const [customStatus, setCustomStatus] = useState('');
+
+  // Zero-Knowledge Backup states
+  const [settingsTab, setSettingsTab] = useState('profile'); // 'profile' | 'backup'
+  const [backupPassword, setBackupPassword] = useState('');
+  const [backupStatusMessage, setBackupStatusMessage] = useState({ text: '', type: '' });
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [lastBackupTime, setLastBackupTime] = useState(null);
 
   // Media upload states
   const [uploading, setUploading] = useState(false);
@@ -151,6 +163,15 @@ export default function ChatPage() {
     setActiveChat(activeFriend?.id || null);
   }, [activeFriend, setActiveChat]);
 
+  // Fetch backup info when settings page is displayed
+  useEffect(() => {
+    if (showSettings) {
+      fetchBackupInfo();
+      setBackupStatusMessage({ text: '', type: '' });
+      setBackupPassword('');
+    }
+  }, [showSettings]);
+
   // -------------------------------------------------------------
   // REST API HANDLERS
   // -------------------------------------------------------------
@@ -180,6 +201,148 @@ export default function ChatPage() {
       }
     } catch (err) {
       console.error('❌ Failed to fetch friends list:', err);
+    }
+  };
+
+  const fetchBackupInfo = async () => {
+    const token = localStorage.getItem('chapp_token');
+    if (!token) return;
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/backup`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.backupUpdatedAt) {
+          setLastBackupTime(data.backupUpdatedAt);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching backup info:', err);
+    }
+  };
+
+  const handleBackup = async (e) => {
+    e.preventDefault();
+    if (!backupPassword) {
+      setBackupStatusMessage({ text: 'Please enter a backup password', type: 'error' });
+      return;
+    }
+
+    setBackupLoading(true);
+    setBackupStatusMessage({ text: 'Preparing local data...', type: 'info' });
+
+    try {
+      const chats = await db.chats.toArray();
+      const messages = await db.messages.toArray();
+      const friends = await db.friends.toArray();
+
+      const payload = {
+        chats,
+        messages,
+        friends,
+        version: 1
+      };
+
+      setBackupStatusMessage({ text: 'Encrypting backup locally...', type: 'info' });
+      const serialized = JSON.stringify(payload);
+      
+      const encryptedBlob = await encryptData(serialized, backupPassword);
+
+      setBackupStatusMessage({ text: 'Uploading secure backup...', type: 'info' });
+      
+      const token = localStorage.getItem('chapp_token');
+      const res = await fetch(`${BACKEND_URL}/api/backup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ encryptedBackup: encryptedBlob })
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Server rejected the backup.');
+      }
+
+      const data = await res.json();
+      setLastBackupTime(data.backupUpdatedAt);
+      setBackupStatusMessage({ text: 'Backup successfully completed and synced!', type: 'success' });
+      setBackupPassword('');
+    } catch (err) {
+      console.error(err);
+      setBackupStatusMessage({ text: `Backup failed: ${err.message}`, type: 'error' });
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
+  const handleRestore = async (e) => {
+    e.preventDefault();
+    if (!backupPassword) {
+      setBackupStatusMessage({ text: 'Please enter your backup password', type: 'error' });
+      return;
+    }
+
+    setBackupLoading(true);
+    setBackupStatusMessage({ text: 'Fetching cloud backup...', type: 'info' });
+
+    try {
+      const token = localStorage.getItem('chapp_token');
+      const res = await fetch(`${BACKEND_URL}/api/backup`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to retrieve backup from server.');
+      }
+
+      const data = await res.json();
+      if (!data.encryptedBackup) {
+        throw new Error('No backup found for this account on the server.');
+      }
+
+      setBackupStatusMessage({ text: 'Decrypting backup data...', type: 'info' });
+
+      const decrypted = await decryptData(data.encryptedBackup, backupPassword);
+      const payload = JSON.parse(decrypted);
+
+      setBackupStatusMessage({ text: 'Merging with local database...', type: 'info' });
+
+      if (payload.friends && Array.isArray(payload.friends)) {
+        await db.friends.bulkPut(payload.friends);
+      }
+
+      if (payload.chats && Array.isArray(payload.chats)) {
+        await db.chats.bulkPut(payload.chats);
+      }
+
+      if (payload.messages && Array.isArray(payload.messages)) {
+        await db.messages.bulkPut(payload.messages);
+      }
+
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 }
+      });
+
+      setBackupStatusMessage({ text: 'Restore completed successfully! Refreshing database...', type: 'success' });
+      setBackupPassword('');
+      
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+
+    } catch (err) {
+      console.error(err);
+      const errMsg = err.name === 'OperationError' 
+        ? 'Decryption failed. Incorrect password.' 
+        : err.message;
+      setBackupStatusMessage({ text: `Restore failed: ${errMsg}`, type: 'error' });
+    } finally {
+      setBackupLoading(false);
     }
   };
 
@@ -944,59 +1107,165 @@ export default function ChatPage() {
          ------------------------------------------------------------- */}
       {showSettings && (
         <div className="fixed inset-0 bg-[#000]/70 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-slide-up">
-          <div className="w-full max-w-[400px] glass-panel rounded-3xl p-8 border border-white/10 relative z-50">
-            <div className="flex items-center justify-between mb-6">
+          <div className="w-full max-w-[400px] glass-panel rounded-3xl p-6 md:p-8 border border-white/10 relative z-50">
+            <div className="flex items-center justify-between mb-5">
               <h3 className="text-lg font-bold text-slate-100 tracking-tight flex items-center gap-2">
                 <Settings className="w-5 h-5 text-cyan-400" />
-                Profile Settings
+                Settings
               </h3>
               <button
-                onClick={() => setShowSettings(false)}
+                onClick={() => {
+                  setShowSettings(false);
+                  setSettingsTab('profile');
+                }}
                 className="p-1 rounded-full border border-white/5 hover:border-red-500/20 hover:bg-white/5 text-slate-400 hover:text-red-400 transition-all shrink-0"
               >
                 <X className="w-4.5 h-4.5" />
               </button>
             </div>
 
-            <form onSubmit={handleUpdateProfile} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Avatar Image URL</label>
-                <input
-                  type="text"
-                  placeholder="Paste URL or preset id (e.g. avatar-3)..."
-                  value={editAvatar}
-                  onChange={(e) => setEditAvatar(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl text-xs glass-input text-slate-100 placeholder:text-slate-600 focus:ring-1 focus:ring-cyan-500"
-                />
-              </div>
+            {/* Tab Selectors */}
+            <div className="flex gap-2 mb-6 border-b border-white/5 pb-3">
+              <button
+                type="button"
+                onClick={() => setSettingsTab('profile')}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold tracking-wider flex items-center justify-center gap-1.5 transition-all duration-300 ${settingsTab === 'profile' ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/15' : 'border border-transparent text-slate-400 hover:text-slate-200'}`}
+              >
+                Profile
+              </button>
+              <button
+                type="button"
+                onClick={() => setSettingsTab('backup')}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold tracking-wider flex items-center justify-center gap-1.5 transition-all duration-300 ${settingsTab === 'backup' ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/15' : 'border border-transparent text-slate-400 hover:text-slate-200'}`}
+              >
+                <Database className="w-3.5 h-3.5" />
+                Backup & Sync
+              </button>
+            </div>
 
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Biography / Tagline</label>
-                <textarea
-                  placeholder="Tell your friends who you are..."
-                  value={editBio}
-                  onChange={(e) => setEditBio(e.target.value)}
-                  rows={3}
-                  className="w-full px-4 py-2.5 rounded-xl text-xs glass-input text-slate-100 placeholder:text-slate-600 focus:ring-1 focus:ring-cyan-500 resize-none"
-                />
-              </div>
+            {/* PROFILE TAB */}
+            {settingsTab === 'profile' && (
+              <form onSubmit={handleUpdateProfile} className="space-y-4 animate-slide-up">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Avatar Image URL</label>
+                  <input
+                    type="text"
+                    placeholder="Paste URL or preset id (e.g. avatar-3)..."
+                    value={editAvatar}
+                    onChange={(e) => setEditAvatar(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl text-xs glass-input text-slate-100 placeholder:text-slate-600 focus:ring-1 focus:ring-cyan-500"
+                  />
+                </div>
 
-              <div className="flex gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowSettings(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-white/5 hover:bg-white/5 text-xs font-bold text-slate-400 transition-all active:scale-95"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 text-xs font-bold text-[#09090c] transition-all active:scale-95 shadow-md shadow-cyan-500/25"
-                >
-                  Save Changes
-                </button>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Biography / Tagline</label>
+                  <textarea
+                    placeholder="Tell your friends who you are..."
+                    value={editBio}
+                    onChange={(e) => setEditBio(e.target.value)}
+                    rows={3}
+                    className="w-full px-4 py-2.5 rounded-xl text-xs glass-input text-slate-100 placeholder:text-slate-600 focus:ring-1 focus:ring-cyan-500 resize-none"
+                  />
+                </div>
+
+                <div className="flex gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowSettings(false)}
+                    className="flex-1 py-2.5 rounded-xl border border-white/5 hover:bg-white/5 text-xs font-bold text-slate-400 transition-all active:scale-95"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 text-xs font-bold text-[#09090c] transition-all active:scale-95 shadow-md shadow-cyan-500/25"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* BACKUP & SYNC TAB */}
+            {settingsTab === 'backup' && (
+              <div className="space-y-4 animate-slide-up">
+                <div className="p-3 rounded-xl bg-cyan-500/5 border border-cyan-500/10 text-[10px] text-slate-400 leading-relaxed flex gap-2.5">
+                  <Lock className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold text-slate-200">Zero-Knowledge Security: </span>
+                    Your chat logs and contacts are encrypted on your device using a password you choose. The server only hosts the encrypted file and never sees your password or raw chats.
+                  </div>
+                </div>
+
+                <div className="px-1 text-xs flex items-center justify-between text-slate-400">
+                  <span>Cloud Backup Status:</span>
+                  <span className="font-medium text-cyan-400">
+                    {lastBackupTime ? new Date(lastBackupTime).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'No backups found'}
+                  </span>
+                </div>
+
+                {backupStatusMessage.text && (
+                  <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+                    backupStatusMessage.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                    backupStatusMessage.type === 'error' ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
+                    'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'
+                  }`}>
+                    {backupLoading && <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />}
+                    <span>{backupStatusMessage.text}</span>
+                  </div>
+                )}
+
+                <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Backup Passphrase</label>
+                    <div className="relative flex items-center">
+                      <input
+                        type="password"
+                        placeholder="Enter a secret password..."
+                        value={backupPassword}
+                        onChange={(e) => setBackupPassword(e.target.value)}
+                        className="w-full px-4 py-2.5 pl-10 rounded-xl text-xs glass-input text-slate-100 placeholder:text-slate-600 focus:ring-1 focus:ring-cyan-500"
+                        disabled={backupLoading}
+                      />
+                      <Key className="absolute left-3 w-4 h-4 text-slate-600" />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-2.5 pt-2">
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleBackup}
+                        disabled={backupLoading}
+                        className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 text-xs font-bold text-[#09090c] transition-all active:scale-95 disabled:opacity-50 shadow-md shadow-cyan-500/25 flex items-center justify-center gap-1.5"
+                      >
+                        {backupLoading && <RefreshCw className="w-3 h-3 animate-spin" />}
+                        Backup Chats
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRestore}
+                        disabled={backupLoading}
+                        className="flex-1 py-2.5 rounded-xl border border-white/5 hover:bg-white/5 text-xs font-bold text-slate-300 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5"
+                      >
+                        {backupLoading && <RefreshCw className="w-3 h-3 animate-spin" />}
+                        Restore Chats
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowSettings(false);
+                        setSettingsTab('profile');
+                      }}
+                      className="w-full py-2 rounded-xl border border-white/3 hover:bg-white/3 text-[10px] font-bold text-slate-500 transition-all"
+                    >
+                      Close Settings
+                    </button>
+                  </div>
+                </form>
               </div>
-            </form>
+            )}
           </div>
         </div>
       )}
