@@ -921,88 +921,126 @@ export default function ChatPage() {
                   const isMe = msg.senderId === currentUser?.id;
                   const prevMsg = idx > 0 ? messages[idx - 1] : null;
                   const isSameGroup = prevMsg && prevMsg.senderId === msg.senderId;
+
+                  // Timestamp + tick icons
+                  const tsColor = isMe ? 'rgba(255,255,255,0.75)' : 'var(--text-subtle)';
+                  const TsRow = () => (
+                    <div style={{
+                      position: 'absolute',
+                      bottom: '5px',
+                      right: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '2px',
+                      lineHeight: 1,
+                      pointerEvents: 'none'
+                    }}>
+                      <span style={{ fontSize: '10px', color: tsColor, whiteSpace: 'nowrap' }}>
+                        {formatTime(msg.timestamp)}
+                      </span>
+                      {isMe && (
+                        <>
+                          {msg.status === 'sending'   && <Clock      className="w-2.5 h-2.5" style={{ color: tsColor }} />}
+                          {msg.status === 'delivered' && <Check      className="w-2.5 h-2.5" style={{ color: tsColor }} />}
+                          {msg.status === 'ack'       && <CheckCheck className="w-2.5 h-2.5" style={{ color: tsColor }} />}
+                        </>
+                      )}
+                    </div>
+                  );
+
                   return (
                     <div
                       key={msg.id}
-                      className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
-                      style={{ marginTop: isSameGroup ? '2px' : '8px' }}
+                      style={{
+                        display: 'flex',
+                        justifyContent: isMe ? 'flex-end' : 'flex-start',
+                        marginTop: isSameGroup ? '2px' : '10px',
+                        paddingLeft: isMe ? '52px' : '0',
+                        paddingRight: isMe ? '0' : '52px',
+                      }}
                     >
-                      <div style={{ maxWidth: '72%' }}>
-                        {/* Bubble with timestamp INSIDE — WhatsApp style */}
-                        <div
-                          className={`px-3 py-2 text-sm ${isMe ? 'bubble-out' : 'bubble-in'}`}
-                          style={{ wordBreak: 'break-word' }}
-                        >
-                          {/* Text + inline timestamp footer */}
-                          {msg.text && (
-                            <p className="leading-snug break-words whitespace-pre-wrap" style={{ display: 'inline' }}>
-                              {msg.text}
-                              {/* Spacer so timestamp doesn't overlap text */}
-                              <span style={{ display: 'inline-block', width: isMe ? '64px' : '36px' }} />
-                            </p>
-                          )}
-
-                          {/* Media */}
-                          {msg.mediaUrl && (
-                            <div className={`overflow-hidden rounded-xl ${msg.text ? 'mt-2' : ''}`}>
-                              {msg.mediaType === 'image' && (
-                                <div className="relative group">
-                                  <img
-                                    src={msg.mediaUrl}
-                                    alt="Attachment"
-                                    className="max-h-[220px] rounded-xl cursor-pointer object-cover w-full"
-                                    onClick={() => downloadFile(msg.mediaUrl, msg.id + '.jpg')}
-                                  />
-                                  <button
-                                    onClick={() => downloadFile(msg.mediaUrl, msg.id + '.jpg')}
-                                    className="absolute bottom-2 right-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-                                    style={{ background: 'rgba(0,0,0,0.6)' }}
-                                  >
-                                    <Download className="w-3.5 h-3.5 text-white" />
-                                  </button>
-                                </div>
-                              )}
-                              {msg.mediaType === 'video' && (
-                                <video src={msg.mediaUrl} controls className="max-h-[240px] rounded-xl w-full" />
-                              )}
-                              {msg.mediaType !== 'image' && msg.mediaType !== 'video' && (
-                                <div
-                                  className="flex items-center justify-between gap-4 p-3 rounded-xl mt-1"
-                                  style={{ background: isMe ? 'rgba(255,255,255,0.15)' : 'var(--border-light)' }}
-                                >
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <FileIcon className="w-4 h-4 shrink-0" />
-                                    <span className="text-xs truncate font-medium max-w-[140px]">Document</span>
-                                  </div>
-                                  <button onClick={() => downloadFile(msg.mediaUrl, 'attachment')} className="shrink-0">
-                                    <Download className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Inline timestamp row at bottom of bubble */}
-                          <div
-                            className={`flex items-center gap-1 mt-0.5 ${isMe ? 'justify-end' : 'justify-end'}`}
-                            style={{ marginTop: msg.text && !msg.mediaUrl ? '-14px' : '4px', float: 'right', marginLeft: '8px' }}
-                          >
-                            <span
-                              className="text-[10px] leading-none"
-                              style={{ color: isMe ? 'rgba(255,255,255,0.72)' : 'var(--text-subtle)', whiteSpace: 'nowrap' }}
-                            >
-                              {formatTime(msg.timestamp)}
-                            </span>
-                            {isMe && (
-                              <span className="flex items-center">
-                                {msg.status === 'sending'   && <Clock className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.6)' }} />}
-                                {msg.status === 'delivered' && <Check className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.72)' }} />}
-                                {msg.status === 'ack'       && <CheckCheck className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.9)' }} />}
-                              </span>
-                            )}
+                      {/* Bubble */}
+                      <div
+                        className={isMe ? 'bubble-out' : 'bubble-in'}
+                        style={{
+                          position: 'relative',
+                          maxWidth: '100%',
+                          fontSize: '14px',
+                          lineHeight: '1.4',
+                          wordBreak: 'break-word',
+                          overflowWrap: 'break-word',
+                        }}
+                      >
+                        {/* Text only — with extra right/bottom padding for timestamp */}
+                        {msg.text && !msg.mediaUrl && (
+                          <div style={{
+                            padding: '7px 10px',
+                            paddingBottom: '22px',
+                            paddingRight: isMe ? '68px' : '52px',
+                          }}>
+                            {msg.text}
+                            <TsRow />
                           </div>
-                          <div style={{ clear: 'both' }} />
-                        </div>
+                        )}
+
+                        {/* Text + media */}
+                        {msg.text && msg.mediaUrl && (
+                          <div style={{ padding: '7px 10px 7px 10px' }}>
+                            {msg.text}
+                          </div>
+                        )}
+
+                        {/* Media */}
+                        {msg.mediaUrl && (
+                          <div style={{ borderRadius: '12px', overflow: 'hidden', margin: msg.text ? '0 0 0 0' : '0' }}>
+                            {msg.mediaType === 'image' && (
+                              <div style={{ position: 'relative' }} className="group">
+                                <img
+                                  src={msg.mediaUrl}
+                                  alt="Attachment"
+                                  style={{ maxHeight: '220px', width: '100%', objectFit: 'cover', borderRadius: '12px', cursor: 'pointer', display: 'block' }}
+                                  onClick={() => downloadFile(msg.mediaUrl, msg.id + '.jpg')}
+                                />
+                                <button
+                                  onClick={() => downloadFile(msg.mediaUrl, msg.id + '.jpg')}
+                                  className="absolute bottom-2 right-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                                  style={{ background: 'rgba(0,0,0,0.6)' }}
+                                >
+                                  <Download className="w-3.5 h-3.5 text-white" />
+                                </button>
+                              </div>
+                            )}
+                            {msg.mediaType === 'video' && (
+                              <video src={msg.mediaUrl} controls style={{ maxHeight: '240px', width: '100%', borderRadius: '12px', display: 'block' }} />
+                            )}
+                            {msg.mediaType !== 'image' && msg.mediaType !== 'video' && (
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  gap: '12px',
+                                  padding: '10px 12px',
+                                  margin: '4px',
+                                  borderRadius: '10px',
+                                  background: isMe ? 'rgba(255,255,255,0.15)' : 'var(--border-light)'
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                                  <FileIcon className="w-4 h-4" style={{ flexShrink: 0 }} />
+                                  <span style={{ fontSize: '12px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>Document</span>
+                                </div>
+                                <button onClick={() => downloadFile(msg.mediaUrl, 'attachment')} style={{ flexShrink: 0 }}>
+                                  <Download className="w-4 h-4" />
+                                </button>
+                              </div>
+                            )}
+                            {/* Timestamp bar below media */}
+                            <div style={{ padding: '3px 8px 5px', textAlign: 'right' }}>
+                              <TsRow />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
