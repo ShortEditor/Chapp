@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useSocket } from '@/context/SocketContext';
 import { Eye, EyeOff, AlertCircle, Zap } from 'lucide-react';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://chapp-oxa7.onrender.com';
 
 export default function SignupPage() {
   const [username, setUsername] = useState('');

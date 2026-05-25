@@ -44,13 +44,13 @@ import {
 import confetti from 'canvas-confetti';
 import { encryptData, decryptData } from '@/lib/crypto';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://chapp-oxa7.onrender.com';
 
 const renderUsername = (username, textStyle = {}) => {
-  if (username === 'ShortEditor') {
+  if (username && username.toLowerCase() === 'shorteditor') {
     return (
       <span className="inline-flex items-center gap-1" style={textStyle}>
-        <span>ShortEditor</span>
+        <span>{username}</span>
         <svg 
           className="w-4 h-4 shrink-0 inline-block" 
           viewBox="0 0 24 24" 
@@ -2067,15 +2067,15 @@ export default function ChatPage() {
                         
                         {showAudioMenu && (
                           <div 
-                            className="absolute bottom-16 left-1/2 -translate-x-1/2 w-56 rounded-2xl p-2 flex flex-col gap-1 z-50"
+                            className="absolute bottom-16 left-1/2 -translate-x-1/2 w-[280px] rounded-3xl p-3 flex flex-col gap-1.5 z-50"
                             style={{
-                              background: 'rgba(23, 23, 23, 0.9)',
-                              backdropFilter: 'blur(20px)',
-                              border: '1px solid rgba(255, 255, 255, 0.12)',
-                              boxShadow: '0 12px 40px rgba(0, 0, 0, 0.4)'
+                              background: 'rgba(23, 23, 23, 0.95)',
+                              backdropFilter: 'blur(24px)',
+                              border: '1px solid rgba(255, 255, 255, 0.15)',
+                              boxShadow: '0 12px 40px rgba(0, 0, 0, 0.5)'
                             }}
                           >
-                            <div className="text-[10px] uppercase font-bold tracking-wider px-3.5 py-1.5" style={{ color: 'rgba(255, 255, 255, 0.45)' }}>
+                            <div className="text-xs uppercase font-bold tracking-wider px-4 py-2" style={{ color: 'rgba(255, 255, 255, 0.5)' }}>
                               Audio Route
                             </div>
                             
@@ -2089,14 +2089,14 @@ export default function ChatPage() {
                                     }
                                     setShowAudioMenu(false);
                                   }}
-                                  className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2.5 transition-all text-white border-none cursor-pointer"
+                                  className="w-full text-left px-4 py-3.5 rounded-2xl text-sm font-semibold flex items-center gap-3 transition-all text-white border-none cursor-pointer"
                                   style={{
-                                    background: !speakerMode ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+                                    background: !speakerMode ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
                                   }}
                                 >
-                                  <Phone className="w-4 h-4 shrink-0" />
+                                  <Phone className="w-5 h-5 shrink-0" />
                                   <span className="flex-1 truncate">Earpiece / Headset</span>
-                                  {!speakerMode && <Check className="w-3.5 h-3.5 shrink-0 text-emerald-400" />}
+                                  {!speakerMode && <Check className="w-5 h-5 shrink-0 text-emerald-400" />}
                                 </button>
                                 <button
                                   type="button"
@@ -2106,14 +2106,14 @@ export default function ChatPage() {
                                     }
                                     setShowAudioMenu(false);
                                   }}
-                                  className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2.5 transition-all text-white border-none cursor-pointer"
+                                  className="w-full text-left px-4 py-3.5 rounded-2xl text-sm font-semibold flex items-center gap-3 transition-all text-white border-none cursor-pointer"
                                   style={{
-                                    background: speakerMode ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+                                    background: speakerMode ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
                                   }}
                                 >
-                                  <Volume2 className="w-4 h-4 shrink-0" />
+                                  <Volume2 className="w-5 h-5 shrink-0" />
                                   <span className="flex-1 truncate">Speakerphone</span>
-                                  {speakerMode && <Check className="w-3.5 h-3.5 shrink-0 text-emerald-400" />}
+                                  {speakerMode && <Check className="w-5 h-5 shrink-0 text-emerald-400" />}
                                 </button>
                               </>
                             ) : (
@@ -2140,14 +2140,14 @@ export default function ChatPage() {
                                       await setAudioOutputDevice(dev.deviceId);
                                       setShowAudioMenu(false);
                                     }}
-                                    className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2.5 transition-all text-white border-none cursor-pointer"
+                                    className="w-full text-left px-4 py-3.5 rounded-2xl text-sm font-semibold flex items-center gap-3 transition-all text-white border-none cursor-pointer"
                                     style={{
-                                      background: isSelected ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+                                      background: isSelected ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
                                     }}
                                   >
-                                    <DeviceIcon className="w-4 h-4 shrink-0" style={{ color: isSelected ? 'var(--primary)' : 'rgba(255, 255, 255, 0.6)' }} />
+                                    <DeviceIcon className="w-5 h-5 shrink-0" style={{ color: isSelected ? 'var(--primary)' : 'rgba(255, 255, 255, 0.6)' }} />
                                     <span className="flex-1 truncate">{label}</span>
-                                    {isSelected && <Check className="w-3.5 h-3.5 shrink-0 text-emerald-400" />}
+                                    {isSelected && <Check className="w-5 h-5 shrink-0 text-emerald-400" />}
                                   </button>
                                 );
                               })

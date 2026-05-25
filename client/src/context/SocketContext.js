@@ -6,7 +6,7 @@ import db from '../db/localDb';
 
 const SocketContext = createContext(null);
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://chapp-oxa7.onrender.com';
 
 const peerConfiguration = {
   iceServers: [

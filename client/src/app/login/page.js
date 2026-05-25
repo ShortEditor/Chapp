@@ -7,7 +7,7 @@ import { useSocket } from '@/context/SocketContext';
 import { Eye, EyeOff, AlertCircle, Zap } from 'lucide-react';
 import db from '@/db/localDb';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://chapp-oxa7.onrender.com';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
