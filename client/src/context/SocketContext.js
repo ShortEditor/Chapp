@@ -42,15 +42,7 @@ export function SocketProvider({ children }) {
   const callTimerRef = useRef(null);
   const pendingCandidatesRef = useRef([]);
 
-  // Initialize background HTML5 remote audio player
-  useEffect(() => {
-    const audio = new Audio();
-    audio.autoplay = true;
-    remoteAudioRef.current = audio;
-    return () => {
-      audio.pause();
-    };
-  }, []);
+
 
   const cleanupCall = useCallback(() => {
     console.log('🧹 [WebRTC] Cleaning up call state and streams...');
@@ -525,12 +517,23 @@ export function SocketProvider({ children }) {
     };
   }, []);
 
+  const generateUUID = () => {
+    if (typeof window !== 'undefined' && window.crypto && window.crypto.randomUUID) {
+      return window.crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  };
+
   // SEND MESSAGE — uses ref so never has stale socket
   const sendMessage = useCallback(async (receiverId, text, mediaUrl = null, mediaType = null) => {
     const activeSocket = socketRef.current;
     const isOnline = activeSocket && activeSocket.connected;
 
-    const messageId = crypto.randomUUID();
+    const messageId = generateUUID();
     const timestamp = Date.now();
     const currentUser = JSON.parse(localStorage.getItem('chapp_user') || '{}');
 
@@ -608,6 +611,13 @@ export function SocketProvider({ children }) {
       }}
     >
       {children}
+      <audio 
+        ref={remoteAudioRef} 
+        autoPlay 
+        playsInline 
+        controls={false}
+        style={{ display: 'none' }} 
+      />
     </SocketContext.Provider>
   );
 }
