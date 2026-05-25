@@ -661,7 +661,16 @@ export default function ChatPage() {
       <div className={`w-full md:w-[340px] h-full flex flex-col sidebar shrink-0 ${activeFriend ? 'hidden md:flex' : 'flex'}`}>
 
         {/* Sidebar Top Header */}
-        <div className="px-4 py-3 flex items-center justify-between border-b" style={{ borderColor: 'var(--border)' }}>
+        <div 
+          className="flex items-center justify-between border-b shrink-0" 
+          style={{ 
+            borderColor: 'var(--border)',
+            paddingLeft: 'calc(16px + env(safe-area-inset-left))',
+            paddingRight: 'calc(16px + env(safe-area-inset-right))',
+            paddingTop: 'calc(12px + env(safe-area-inset-top))',
+            paddingBottom: '12px'
+          }}
+        >
           <div className="flex items-center gap-3">
             <div
               className="avatar w-9 h-9 text-xs shrink-0 relative"
@@ -714,8 +723,16 @@ export default function ChatPage() {
               <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>Get offline support and quick access.</p>
               <button
                 onClick={triggerPwaInstallation}
-                className="mt-2 px-3 py-1 rounded-full text-[10px] font-bold text-white transition-colors"
-                style={{ background: 'var(--primary)' }}
+                className="mt-2 px-4 py-1.5 rounded-full text-[11px] font-bold text-white transition-colors cursor-pointer"
+                style={{ 
+                  background: 'var(--primary)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 'auto',
+                  minWidth: '70px',
+                  border: 'none'
+                }}
               >
                 Install
               </button>
@@ -956,8 +973,16 @@ export default function ChatPage() {
           <>
             {/* Chat Header */}
             <div
-              className="h-16 flex items-center gap-3 px-4 shrink-0"
-              style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}
+              className="flex items-center gap-3 px-4 shrink-0"
+              style={{ 
+                background: 'var(--surface)', 
+                borderBottom: '1px solid var(--border)',
+                paddingLeft: 'calc(16px + env(safe-area-inset-left))',
+                paddingRight: 'calc(16px + env(safe-area-inset-right))',
+                paddingTop: 'calc(12px + env(safe-area-inset-top))',
+                paddingBottom: '12px',
+                minHeight: '64px'
+              }}
             >
               <button
                 onClick={() => setActiveFriend(null)}
@@ -1148,7 +1173,7 @@ export default function ChatPage() {
             </div>
 
             {/* Input Area */}
-            <div className="msg-input px-3 py-3 shrink-0">
+            <div className="msg-input shrink-0">
               {/* Connection warning */}
               {!isConnected && (
                 <div
