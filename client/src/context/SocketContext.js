@@ -33,6 +33,9 @@ export function SocketProvider({ children }) {
   const [callState, setCallState] = useState('idle'); // 'idle' | 'calling' | 'ringing' | 'connected'
   const [callPartner, setCallPartner] = useState(null); // { id, username }
   const [isMuted, setIsMuted] = useState(false);
+  const [speakerMode, setSpeakerMode] = useState(false);
+  const [audioOutputs, setAudioOutputs] = useState([]);
+  const [currentSinkId, setCurrentSinkId] = useState('');
   const [callDuration, setCallDuration] = useState(0);
 
   const localStreamRef = useRef(null);
@@ -66,6 +69,9 @@ export function SocketProvider({ children }) {
     setCallState('idle');
     setCallPartner(null);
     setIsMuted(false);
+    setSpeakerMode(false);
+    setAudioOutputs([]);
+    setCurrentSinkId('');
     setCallDuration(0);
   }, []);
 
@@ -218,6 +224,114 @@ export function SocketProvider({ children }) {
       setIsMuted(prev => !prev);
     }
   }, []);
+
+  const enumerateAudioOutputs = useCallback(async () => {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const outputs = devices.filter(d => d.kind === 'audiooutput');
+        console.log('🔊 [WebRTC] Available audio outputs:', outputs);
+        setAudioOutputs(outputs);
+        if (remoteAudioRef.current) {
+          const currentSink = remoteAudioRef.current.sinkId || '';
+          setCurrentSinkId(currentSink);
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ [WebRTC] Failed to enumerate audio devices:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (callState === 'connected') {
+      // Small delay to let stream fully bind
+      const timer = setTimeout(() => {
+        enumerateAudioOutputs();
+      }, 500);
+
+      const handleDeviceChange = () => {
+        console.log('🔊 [WebRTC] Audio devices changed, re-enumerating...');
+        enumerateAudioOutputs();
+      };
+
+      if (typeof navigator !== 'undefined' && navigator.mediaDevices) {
+        navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
+      }
+
+      return () => {
+        clearTimeout(timer);
+        if (typeof navigator !== 'undefined' && navigator.mediaDevices) {
+          navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
+        }
+      };
+    }
+  }, [callState, enumerateAudioOutputs]);
+
+  const setAudioOutputDevice = useCallback(async (sinkId) => {
+    if (!remoteAudioRef.current) return;
+    try {
+      if (typeof remoteAudioRef.current.setSinkId !== 'undefined') {
+        await remoteAudioRef.current.setSinkId(sinkId);
+        setCurrentSinkId(sinkId);
+        console.log(`🔊 [WebRTC] Successfully set audio output sink to: ${sinkId || 'default'}`);
+
+        // Update speakerMode based on whether the device is labeled speaker
+        if (sinkId) {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const dev = devices.find(d => d.deviceId === sinkId);
+          if (dev) {
+            const label = dev.label.toLowerCase();
+            setSpeakerMode(label.includes('speaker') || label.includes('loudspeaker') || label.includes('hands-free'));
+          }
+        } else {
+          setSpeakerMode(false);
+        }
+      } else {
+        console.warn('⚠️ [WebRTC] Browser does not support setSinkId audio output routing.');
+      }
+    } catch (err) {
+      console.error('❌ [WebRTC] Error setting audio output device:', err);
+    }
+  }, []);
+
+  const toggleSpeakerMode = useCallback(async () => {
+    if (!remoteAudioRef.current) return;
+    const nextMode = !speakerMode;
+
+    try {
+      if (typeof remoteAudioRef.current.setSinkId !== 'undefined') {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const outputs = devices.filter(d => d.kind === 'audiooutput');
+
+        if (nextMode) {
+          const speaker = outputs.find(d =>
+            d.label.toLowerCase().includes('speaker') ||
+            d.label.toLowerCase().includes('loudspeaker') ||
+            d.label.toLowerCase().includes('hands-free')
+          );
+          if (speaker) {
+            await remoteAudioRef.current.setSinkId(speaker.deviceId);
+            setCurrentSinkId(speaker.deviceId);
+            console.log('🔊 [WebRTC] Switched output to speaker:', speaker.label);
+          } else if (outputs.length > 0) {
+            const fallback = outputs.find(d => !d.label.toLowerCase().includes('earpiece') && d.deviceId !== 'default');
+            const targetId = fallback ? fallback.deviceId : outputs[0].deviceId;
+            await remoteAudioRef.current.setSinkId(targetId);
+            setCurrentSinkId(targetId);
+          }
+        } else {
+          await remoteAudioRef.current.setSinkId('');
+          setCurrentSinkId('');
+          console.log('🔊 [WebRTC] Switched output back to default earpiece/headset');
+        }
+      } else {
+        console.warn('⚠️ [WebRTC] Browser does not support setSinkId audio output routing.');
+      }
+      setSpeakerMode(nextMode);
+    } catch (err) {
+      console.error('❌ [WebRTC] Error toggling speaker mode:', err);
+    }
+  }, [speakerMode]);
 
   const syncPendingTicks = useCallback(async (friendId) => {
     const activeSocket = socketRef.current;
@@ -602,12 +716,18 @@ export function SocketProvider({ children }) {
         callState,
         callPartner,
         isMuted,
+        speakerMode,
+        audioOutputs,
+        currentSinkId,
+        setAudioOutputDevice,
+        enumerateAudioOutputs,
         callDuration,
         initiateCall,
         answerIncomingCall,
         rejectIncomingCall,
         endActiveCall,
-        toggleMute
+        toggleMute,
+        toggleSpeakerMode
       }}
     >
       {children}

@@ -35,7 +35,11 @@ import {
   Phone,
   PhoneOff,
   Mic,
-  MicOff
+  MicOff,
+  Volume2,
+  Bluetooth,
+  Headphones,
+  ChevronUp
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { encryptData, decryptData } from '@/lib/crypto';
@@ -90,12 +94,17 @@ export default function ChatPage() {
     callState,
     callPartner,
     isMuted,
+    speakerMode,
+    audioOutputs,
+    currentSinkId,
+    setAudioOutputDevice,
     callDuration,
     initiateCall,
     answerIncomingCall,
     rejectIncomingCall,
     endActiveCall,
-    toggleMute
+    toggleMute,
+    toggleSpeakerMode
   } = useSocket();
 
   // Local React states
@@ -111,6 +120,8 @@ export default function ChatPage() {
   
   // Profile settings editor modal state
   const [showSettings, setShowSettings] = useState(false);
+  const [showAudioMenu, setShowAudioMenu] = useState(false);
+  const [profileStatusMessage, setProfileStatusMessage] = useState({ text: '', type: '' });
   const [editBio, setEditBio] = useState('');
   const [editAvatar, setEditAvatar] = useState('');
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -347,34 +358,110 @@ export default function ChatPage() {
     if (!file) return;
 
     setAvatarUploading(true);
-    setBackupStatusMessage({ text: 'Uploading avatar to Cloudinary...', type: 'info' });
+    setProfileStatusMessage({ text: 'Uploading avatar...', type: 'info' });
 
+    const token = localStorage.getItem('chapp_token');
+
+    // Layer 1: Secure Signed Cloudinary Upload
     try {
-      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'chapp-demo';
+      console.log('☁️ [Cloudinary] Attempting secure signed upload...');
+      if (!token) throw new Error('Not authenticated');
+
+      const signRes = await fetch(`${BACKEND_URL}/api/cloudinary/sign`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!signRes.ok) {
+        throw new Error('Signed upload endpoint not available or returned error');
+      }
+
+      const signData = await signRes.json();
+      const { signature, timestamp, folder, apiKey, cloudName } = signData;
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('api_key', apiKey);
+      formData.append('timestamp', timestamp);
+      formData.append('signature', signature);
+      formData.append('folder', folder);
+
+      const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error('Signed Cloudinary upload failed');
+      }
+
+      const uploadData = await uploadRes.json();
+      const imageUrl = uploadData.secure_url;
+
+      setEditAvatar(imageUrl);
+      setProfileStatusMessage({ text: 'Avatar uploaded successfully via Cloudinary! Make sure to click Save Changes below.', type: 'success' });
+      setAvatarUploading(false);
+      return;
+    } catch (layer1Err) {
+      console.warn('☁️ [Cloudinary] Layer 1 Signed Upload failed:', layer1Err.message);
+    }
+
+    // Layer 2: Unsigned Cloudinary Upload (Fallback)
+    try {
+      console.log('☁️ [Cloudinary] Attempting unsigned fallback upload...');
+      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'dlw5v5zot';
       const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'avatar_preset';
 
       const formData = new FormData();
       formData.append('file', file);
       formData.append('upload_preset', uploadPreset);
 
-      console.log('☁️ [Cloudinary] Uploading avatar...');
       const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
         method: 'POST',
         body: formData
       });
 
       if (!res.ok) {
-        throw new Error('Cloudinary upload failed. Check your Cloud Name or Preset credentials.');
+        throw new Error('Unsigned upload failed');
       }
 
       const data = await res.json();
       const imageUrl = data.secure_url;
 
       setEditAvatar(imageUrl);
-      setBackupStatusMessage({ text: 'Avatar uploaded successfully! Make sure to click Save Changes below.', type: 'success' });
-    } catch (err) {
-      console.error(err);
-      setBackupStatusMessage({ text: `Avatar upload failed: ${err.message}`, type: 'error' });
+      setProfileStatusMessage({ text: 'Avatar uploaded successfully via Cloudinary! Make sure to click Save Changes below.', type: 'success' });
+      setAvatarUploading(false);
+      return;
+    } catch (layer2Err) {
+      console.warn('☁️ [Cloudinary] Layer 2 Unsigned Upload failed:', layer2Err.message);
+    }
+
+    // Layer 3: Self-Hosted Server Fallback
+    try {
+      console.log('💻 [Server] Attempting self-hosted fallback upload...');
+      if (!token) throw new Error('Not authenticated');
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch(`${BACKEND_URL}/api/media/upload`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+
+      if (!res.ok) {
+        throw new Error('Server upload failed');
+      }
+
+      const data = await res.json();
+      const imageUrl = data.url;
+
+      setEditAvatar(imageUrl);
+      setProfileStatusMessage({ text: 'Uploaded successfully to Chapp Server! Click Save Changes below.', type: 'success' });
+    } catch (layer3Err) {
+      console.error('❌ All avatar upload layers failed:', layer3Err.message);
+      setProfileStatusMessage({ text: `Avatar upload failed: ${layer3Err.message}`, type: 'error' });
     } finally {
       setAvatarUploading(false);
     }
@@ -1537,6 +1624,9 @@ export default function ChatPage() {
                     />
                   </label>
                   <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-1 select-none">Tap circle to upload</p>
+                  <div className="mt-2 text-base font-bold flex items-center gap-1.5" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>
+                    @{renderUsername(currentUser?.username)}
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -1559,8 +1649,32 @@ export default function ChatPage() {
                     className="modal-input resize-none"
                   />
                 </div>
+                {profileStatusMessage.text && (
+                  <div
+                    className="p-3 rounded-xl text-xs flex items-center justify-between gap-2 transition-all duration-200"
+                    style={{
+                      background: profileStatusMessage.type === 'success' ? '#e6f4ea' : profileStatusMessage.type === 'error' ? '#fce8e6' : 'var(--primary-light)',
+                      color: profileStatusMessage.type === 'success' ? '#137333' : profileStatusMessage.type === 'error' ? '#c5221f' : 'var(--primary)',
+                      border: `1px solid ${profileStatusMessage.type === 'success' ? '#ceead6' : profileStatusMessage.type === 'error' ? '#f28b82' : 'var(--primary-container)'}`
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      {avatarUploading && <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />}
+                      <span>{profileStatusMessage.text}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setProfileStatusMessage({ text: '', type: '' })}
+                      className="p-1 rounded-full hover:bg-black/5 transition-colors cursor-pointer border-none shrink-0"
+                      style={{ color: 'inherit' }}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+
                 <div className="flex gap-3 pt-3">
-                  <button type="button" onClick={() => { setShowSettings(false); setBackupStatusMessage({ text: '', type: '' }); }} className="btn-ghost flex-1">Cancel</button>
+                  <button type="button" onClick={() => { setShowSettings(false); setProfileStatusMessage({ text: '', type: '' }); }} className="btn-ghost flex-1">Cancel</button>
                   <button type="submit" className="btn-blue flex-1">Save Changes</button>
                 </div>
               </form>
@@ -1618,15 +1732,25 @@ export default function ChatPage() {
 
                 {backupStatusMessage.text && (
                   <div
-                    className="p-3 rounded-xl text-xs flex items-center gap-2"
+                    className="p-3 rounded-xl text-xs flex items-center justify-between gap-2 transition-all duration-200"
                     style={{
                       background: backupStatusMessage.type === 'success' ? '#e6f4ea' : backupStatusMessage.type === 'error' ? '#fce8e6' : 'var(--primary-light)',
                       color: backupStatusMessage.type === 'success' ? '#137333' : backupStatusMessage.type === 'error' ? '#c5221f' : 'var(--primary)',
                       border: `1px solid ${backupStatusMessage.type === 'success' ? '#ceead6' : backupStatusMessage.type === 'error' ? '#f28b82' : 'var(--primary-container)'}`
                     }}
                   >
-                    {backupLoading && <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />}
-                    <span>{backupStatusMessage.text}</span>
+                    <div className="flex items-center gap-2">
+                      {backupLoading && <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />}
+                      <span>{backupStatusMessage.text}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setBackupStatusMessage({ text: '', type: '' })}
+                      className="p-1 rounded-full hover:bg-black/5 transition-colors cursor-pointer border-none shrink-0"
+                      style={{ color: 'inherit' }}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
                   </div>
                 )}
 
@@ -1869,18 +1993,125 @@ export default function ChatPage() {
               {(callState === 'calling' || callState === 'connected') && (
                 <>
                   {callState === 'connected' && (
-                    <button
-                      onClick={toggleMute}
-                      className="w-12 h-12 rounded-full transition-all flex items-center justify-center cursor-pointer shadow-md"
-                      style={{
-                        background: isMuted ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)',
-                        color: '#fff',
-                        border: '1px solid rgba(255,255,255,0.1)'
-                      }}
-                      title={isMuted ? 'Unmute' : 'Mute'}
-                    >
-                      {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-                    </button>
+                    <>
+                      <button
+                        onClick={toggleMute}
+                        className="w-12 h-12 rounded-full transition-all flex items-center justify-center cursor-pointer shadow-md"
+                        style={{
+                          background: isMuted ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)',
+                          color: '#fff',
+                          border: '1px solid rgba(255,255,255,0.1)'
+                        }}
+                        title={isMuted ? 'Unmute Mic' : 'Mute Mic'}
+                      >
+                        {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                      </button>
+
+                      <div className="relative">
+                        <button
+                          onClick={() => setShowAudioMenu(!showAudioMenu)}
+                          className="w-12 h-12 rounded-full transition-all flex items-center justify-center cursor-pointer shadow-md"
+                          style={{
+                            background: showAudioMenu || speakerMode ? 'var(--primary)' : 'rgba(255,255,255,0.08)',
+                            color: '#fff',
+                            border: showAudioMenu || speakerMode ? '1px solid var(--primary)' : '1px solid rgba(255,255,255,0.1)'
+                          }}
+                          title="Change Audio Route"
+                        >
+                          <Volume2 className="w-5 h-5" />
+                        </button>
+                        
+                        {showAudioMenu && (
+                          <div 
+                            className="absolute bottom-16 left-1/2 -translate-x-1/2 w-56 rounded-2xl p-2 flex flex-col gap-1 z-50"
+                            style={{
+                              background: 'rgba(23, 23, 23, 0.9)',
+                              backdropFilter: 'blur(20px)',
+                              border: '1px solid rgba(255, 255, 255, 0.12)',
+                              boxShadow: '0 12px 40px rgba(0, 0, 0, 0.4)'
+                            }}
+                          >
+                            <div className="text-[10px] uppercase font-bold tracking-wider px-3.5 py-1.5" style={{ color: 'rgba(255, 255, 255, 0.45)' }}>
+                              Audio Route
+                            </div>
+                            
+                            {audioOutputs.length === 0 ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    if (speakerMode) {
+                                      await toggleSpeakerMode();
+                                    }
+                                    setShowAudioMenu(false);
+                                  }}
+                                  className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2.5 transition-all text-white border-none cursor-pointer"
+                                  style={{
+                                    background: !speakerMode ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+                                  }}
+                                >
+                                  <Phone className="w-4 h-4 shrink-0" />
+                                  <span className="flex-1 truncate">Earpiece / Headset</span>
+                                  {!speakerMode && <Check className="w-3.5 h-3.5 shrink-0 text-emerald-400" />}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    if (!speakerMode) {
+                                      await toggleSpeakerMode();
+                                    }
+                                    setShowAudioMenu(false);
+                                  }}
+                                  className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2.5 transition-all text-white border-none cursor-pointer"
+                                  style={{
+                                    background: speakerMode ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+                                  }}
+                                >
+                                  <Volume2 className="w-4 h-4 shrink-0" />
+                                  <span className="flex-1 truncate">Speakerphone</span>
+                                  {speakerMode && <Check className="w-3.5 h-3.5 shrink-0 text-emerald-400" />}
+                                </button>
+                              </>
+                            ) : (
+                              audioOutputs.map(dev => {
+                                const label = dev.label || 'Unknown Output';
+                                const isSelected = currentSinkId === dev.deviceId || (dev.deviceId === 'default' && !currentSinkId);
+                                
+                                let DeviceIcon = Volume2;
+                                if (label.toLowerCase().includes('bluetooth') || label.toLowerCase().includes('wireless') || label.toLowerCase().includes('buds') || label.toLowerCase().includes('pods')) {
+                                  DeviceIcon = Bluetooth;
+                                } else if (label.toLowerCase().includes('headphone') || label.toLowerCase().includes('headset') || label.toLowerCase().includes('audio jack')) {
+                                  DeviceIcon = Headphones;
+                                } else if (label.toLowerCase().includes('earpiece') || label.toLowerCase().includes('receiver') || label.toLowerCase().includes('handset')) {
+                                  DeviceIcon = Phone;
+                                } else if (label.toLowerCase().includes('speaker') || label.toLowerCase().includes('loudspeaker')) {
+                                  DeviceIcon = Volume2;
+                                }
+                                
+                                return (
+                                  <button
+                                    key={dev.deviceId}
+                                    type="button"
+                                    onClick={async () => {
+                                      await setAudioOutputDevice(dev.deviceId);
+                                      setShowAudioMenu(false);
+                                    }}
+                                    className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2.5 transition-all text-white border-none cursor-pointer"
+                                    style={{
+                                      background: isSelected ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+                                    }}
+                                  >
+                                    <DeviceIcon className="w-4 h-4 shrink-0" style={{ color: isSelected ? 'var(--primary)' : 'rgba(255, 255, 255, 0.6)' }} />
+                                    <span className="flex-1 truncate">{label}</span>
+                                    {isSelected && <Check className="w-3.5 h-3.5 shrink-0 text-emerald-400" />}
+                                  </button>
+                                );
+                              })
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </>
                   )}
 
                   <button

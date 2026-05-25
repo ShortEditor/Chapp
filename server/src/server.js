@@ -5,6 +5,7 @@ import cors from 'cors';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import dotenv from 'dotenv';
 import prisma from './db.js';
 import webpush from 'web-push';
@@ -782,6 +783,38 @@ app.post('/api/friends/respond', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('❌ [Friend Respond] Error:', err.message);
     res.status(500).json({ error: 'Server error responding to request' });
+  }
+});
+
+// Secure Cloudinary signature generation endpoint (protected)
+app.post('/api/cloudinary/sign', authenticateToken, (req, res) => {
+  try {
+    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+    const apiKey = process.env.CLOUDINARY_API_KEY;
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+
+    if (!apiSecret || !apiKey || !cloudName) {
+      console.warn('⚠️ [Cloudinary] Server credentials not configured fully in .env.');
+      return res.status(500).json({ error: 'Cloudinary server credentials not configured.' });
+    }
+
+    const timestamp = Math.round((new Date()).getTime() / 1000);
+    const folder = 'avatars';
+    
+    // Sort and calculate signature
+    const paramString = `folder=${folder}&timestamp=${timestamp}`;
+    const signature = crypto.createHash('sha1').update(paramString + apiSecret).digest('hex');
+
+    res.json({
+      signature,
+      timestamp,
+      folder,
+      apiKey,
+      cloudName
+    });
+  } catch (err) {
+    console.error('❌ [Cloudinary Signature] Error:', err.message);
+    res.status(500).json({ error: 'Server error generating signature' });
   }
 });
 
