@@ -217,10 +217,11 @@ export function SocketProvider({ children }) {
     const messageId = crypto.randomUUID();
     const timestamp = Date.now();
 
+    const currentUser = JSON.parse(localStorage.getItem('chapp_user') || '{}');
     const localMessage = {
       id: messageId,
       chatId: receiverId,
-      senderId: socket.user.id,
+      senderId: currentUser.id,
       receiverId,
       text: text || '',
       mediaUrl,
