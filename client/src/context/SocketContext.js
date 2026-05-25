@@ -44,9 +44,36 @@ export function SocketProvider({ children }) {
   const remoteAudioRef = useRef(null);
   const callTimerRef = useRef(null);
   const pendingCandidatesRef = useRef([]);
+  const ringbackAudioRef = useRef(null);
+  const incomingAudioRef = useRef(null);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      ringbackAudioRef.current = new Audio('/ringback.mp3');
+      ringbackAudioRef.current.loop = true;
+      incomingAudioRef.current = new Audio('/incoming.mp3');
+      incomingAudioRef.current.loop = true;
+    }
+  }, []);
 
-
+  useEffect(() => {
+    if (!ringbackAudioRef.current || !incomingAudioRef.current) return;
+    
+    if (callState === 'calling') {
+      ringbackAudioRef.current.play().catch(e => console.warn('Ringback play blocked', e));
+      incomingAudioRef.current.pause();
+      incomingAudioRef.current.currentTime = 0;
+    } else if (callState === 'ringing') {
+      incomingAudioRef.current.play().catch(e => console.warn('Incoming play blocked', e));
+      ringbackAudioRef.current.pause();
+      ringbackAudioRef.current.currentTime = 0;
+    } else {
+      ringbackAudioRef.current.pause();
+      ringbackAudioRef.current.currentTime = 0;
+      incomingAudioRef.current.pause();
+      incomingAudioRef.current.currentTime = 0;
+    }
+  }, [callState]);
   const cleanupCall = useCallback(() => {
     console.log('🧹 [WebRTC] Cleaning up call state and streams...');
     if (localStreamRef.current) {

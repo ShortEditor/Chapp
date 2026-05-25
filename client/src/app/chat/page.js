@@ -78,6 +78,69 @@ const renderUsername = (username, textStyle = {}) => {
   return <span style={textStyle}>{username || ''}</span>;
 };
 
+const MessageInputBar = React.memo(({ onSendMessage, pendingMedia, uploading, fileInputRef, triggerFileSelector, handleFileUpload, emitTyping, activeFriendId }) => {
+  const [inputText, setInputText] = useState('');
+  const typingTimeoutRef = useRef(null);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const success = await onSendMessage(inputText);
+    if (success !== false) {
+      setInputText('');
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (inputText.length === 0) {
+      emitTyping(activeFriendId, true);
+    }
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      emitTyping(activeFriendId, false);
+    }, 2000);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="flex items-center gap-4">
+      <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*,video/*,application/*" />
+
+      <button
+        type="button"
+        onClick={triggerFileSelector}
+        disabled={uploading}
+        className="p-3.5 rounded-full transition-colors shrink-0"
+        style={{ color: 'var(--text-muted)' }}
+        onMouseEnter={e => e.currentTarget.style.background = 'var(--border-light)'}
+        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+      >
+        <Paperclip className="w-5 h-5" />
+      </button>
+
+      <input
+        type="text"
+        placeholder="Type a message..."
+        value={inputText}
+        onChange={e => setInputText(e.target.value)}
+        onKeyDown={handleKeyDown}
+        className="msg-field"
+      />
+
+      <button
+        type="submit"
+        disabled={!inputText.trim() && !pendingMedia}
+        className="w-11 h-11 rounded-full text-white shrink-0 flex items-center justify-center transition-all disabled:opacity-40 disabled:pointer-events-none hover:scale-105 active:scale-95 shadow-md border-none cursor-pointer"
+        style={{ 
+          background: 'linear-gradient(135deg, var(--primary) 0%, #4a5cf6 100%)',
+          boxShadow: '0 4px 12px rgba(26, 115, 232, 0.25)'
+        }}
+      >
+        <Send className="w-5 h-5" style={{ transform: 'rotate(-15deg) translate(1px, -1px)' }} />
+      </button>
+    </form>
+  );
+});
+MessageInputBar.displayName = 'MessageInputBar';
+
 export default function ChatPage() {
   const router = useRouter();
   const {
@@ -111,7 +174,7 @@ export default function ChatPage() {
   const [currentUser, setCurrentUser] = useState(null);
   const [activeTab, setActiveTab] = useState('chats'); // 'chats' | 'friends' | 'requests'
   const [activeFriend, setActiveFriend] = useState(null);
-  const [inputText, setInputText] = useState('');
+
   const [newFriendUsername, setNewFriendUsername] = useState('');
   const [friendRequestMessage, setFriendRequestMessage] = useState({ text: '', type: '' });
   const [isPwaInstallable, setIsPwaInstallable] = useState(false);
@@ -142,7 +205,7 @@ export default function ChatPage() {
 
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
-  const typingTimeoutRef = useRef(null);
+
   const lastChatIdRef = useRef(null);
 
   // -------------------------------------------------------------
@@ -475,9 +538,12 @@ export default function ChatPage() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        const data = await res.json();
-        if (data.backupUpdatedAt) {
-          setLastBackupTime(data.backupUpdatedAt);
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const data = await res.json();
+          if (data.backupUpdatedAt) {
+            setLastBackupTime(data.backupUpdatedAt);
+          }
         }
       }
     } catch (err) {
@@ -513,9 +579,12 @@ export default function ChatPage() {
       });
 
       if (res.ok) {
-        const data = await res.json();
-        setLastBackupTime(data.backupUpdatedAt);
-        console.log('✅ [Auto-Backup] Silent background auto-backup completed successfully!');
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const data = await res.json();
+          setLastBackupTime(data.backupUpdatedAt);
+          console.log('✅ [Auto-Backup] Silent background auto-backup completed successfully!');
+        }
       }
     } catch (err) {
       console.error('❌ [Auto-Backup] Background auto-backup failed:', err);
@@ -585,8 +654,18 @@ export default function ChatPage() {
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Server rejected the backup.');
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const data = await res.json();
+          throw new Error(data.error || 'Server rejected the backup.');
+        } else {
+          throw new Error('Backend unavailable (Did you set NEXT_PUBLIC_BACKEND_URL on Vercel?).');
+        }
+      }
+
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+         throw new Error('Backend unavailable (Did you set NEXT_PUBLIC_BACKEND_URL on Vercel?).');
       }
 
       const data = await res.json();
@@ -619,6 +698,11 @@ export default function ChatPage() {
 
       if (!res.ok) {
         throw new Error('Failed to retrieve backup from server.');
+      }
+
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+         throw new Error('Backend unavailable (Did you set NEXT_PUBLIC_BACKEND_URL on Vercel?).');
       }
 
       const data = await res.json();
@@ -798,14 +882,13 @@ export default function ChatPage() {
   // -------------------------------------------------------------
   // MESSAGING CORE LOGIC
   // -------------------------------------------------------------
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
-    if (!inputText.trim() && !pendingMedia) return;
+  const onSendMessage = async (text) => {
+    if (!text.trim() && !pendingMedia) return false;
 
     setSendError('');
     const result = await sendMessage(
       activeFriend.id,
-      inputText.trim(),
+      text.trim(),
       pendingMedia?.url || null,
       pendingMedia?.type || null
     );
@@ -813,25 +896,12 @@ export default function ChatPage() {
     if (!result) {
       setSendError('Failed to save message. IndexedDB may be full.');
       setTimeout(() => setSendError(''), 4000);
-      return;
+      return false;
     }
 
-    // Reset states
-    setInputText('');
     setPendingMedia(null);
     emitTyping(activeFriend.id, false);
-  };
-
-  const handleInputKeyDown = (e) => {
-    if (inputText.length === 0) {
-      emitTyping(activeFriend.id, true);
-    }
-
-    // Debounced stop typing
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(() => {
-      emitTyping(activeFriend.id, false);
-    }, 2000);
+    return true;
   };
 
   const handleLogout = () => {
@@ -1458,42 +1528,16 @@ export default function ChatPage() {
                 </div>
               )}
 
-              <form onSubmit={handleSendMessage} className="flex items-center gap-4">
-                <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*,video/*,application/*" />
-
-                <button
-                  type="button"
-                  onClick={triggerFileSelector}
-                  disabled={uploading}
-                  className="p-3.5 rounded-full transition-colors shrink-0"
-                  style={{ color: 'var(--text-muted)' }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'var(--border-light)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                >
-                  <Paperclip className="w-5 h-5" />
-                </button>
-
-                <input
-                  type="text"
-                  placeholder="Type a message..."
-                  value={inputText}
-                  onChange={e => setInputText(e.target.value)}
-                  onKeyDown={handleInputKeyDown}
-                  className="msg-field"
-                />
-
-                <button
-                  type="submit"
-                  disabled={!inputText.trim() && !pendingMedia}
-                  className="w-11 h-11 rounded-full text-white shrink-0 flex items-center justify-center transition-all disabled:opacity-40 disabled:pointer-events-none hover:scale-105 active:scale-95 shadow-md border-none cursor-pointer"
-                  style={{ 
-                    background: 'linear-gradient(135deg, var(--primary) 0%, #4a5cf6 100%)',
-                    boxShadow: '0 4px 12px rgba(26, 115, 232, 0.25)'
-                  }}
-                >
-                  <Send className="w-5 h-5" style={{ transform: 'rotate(-15deg) translate(1px, -1px)' }} />
-                </button>
-              </form>
+              <MessageInputBar
+                onSendMessage={onSendMessage}
+                pendingMedia={pendingMedia}
+                uploading={uploading}
+                fileInputRef={fileInputRef}
+                triggerFileSelector={triggerFileSelector}
+                handleFileUpload={handleFileUpload}
+                emitTyping={emitTyping}
+                activeFriendId={activeFriend.id}
+              />
             </div>
           </>
         ) : (
