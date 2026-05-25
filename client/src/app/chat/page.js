@@ -900,7 +900,7 @@ export default function ChatPage() {
             </div>
 
             {/* Messages Feed */}
-            <div className="flex-1 overflow-y-auto px-4 py-4" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <div className="flex-1 overflow-y-auto px-3 py-3" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
               {messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center flex-1 text-center select-none">
                   <div
@@ -917,14 +917,30 @@ export default function ChatPage() {
                   </p>
                 </div>
               ) : (
-                messages.map(msg => {
+                messages.map((msg, idx) => {
                   const isMe = msg.senderId === currentUser?.id;
+                  const prevMsg = idx > 0 ? messages[idx - 1] : null;
+                  const isSameGroup = prevMsg && prevMsg.senderId === msg.senderId;
                   return (
-                    <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[75%] md:max-w-[65%]`}>
-                        {/* Bubble */}
-                        <div className={`px-4 py-2.5 text-sm ${isMe ? 'bubble-out' : 'bubble-in'}`}>
-                          {msg.text && <p className="leading-relaxed break-words whitespace-pre-wrap">{msg.text}</p>}
+                    <div
+                      key={msg.id}
+                      className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
+                      style={{ marginTop: isSameGroup ? '2px' : '8px' }}
+                    >
+                      <div style={{ maxWidth: '72%' }}>
+                        {/* Bubble with timestamp INSIDE — WhatsApp style */}
+                        <div
+                          className={`px-3 py-2 text-sm ${isMe ? 'bubble-out' : 'bubble-in'}`}
+                          style={{ wordBreak: 'break-word' }}
+                        >
+                          {/* Text + inline timestamp footer */}
+                          {msg.text && (
+                            <p className="leading-snug break-words whitespace-pre-wrap" style={{ display: 'inline' }}>
+                              {msg.text}
+                              {/* Spacer so timestamp doesn't overlap text */}
+                              <span style={{ display: 'inline-block', width: isMe ? '64px' : '36px' }} />
+                            </p>
+                          )}
 
                           {/* Media */}
                           {msg.mediaUrl && (
@@ -934,7 +950,7 @@ export default function ChatPage() {
                                   <img
                                     src={msg.mediaUrl}
                                     alt="Attachment"
-                                    className="max-h-[220px] rounded-xl cursor-pointer object-cover"
+                                    className="max-h-[220px] rounded-xl cursor-pointer object-cover w-full"
                                     onClick={() => downloadFile(msg.mediaUrl, msg.id + '.jpg')}
                                   />
                                   <button
@@ -951,7 +967,7 @@ export default function ChatPage() {
                               )}
                               {msg.mediaType !== 'image' && msg.mediaType !== 'video' && (
                                 <div
-                                  className="flex items-center justify-between gap-4 p-3 rounded-xl"
+                                  className="flex items-center justify-between gap-4 p-3 rounded-xl mt-1"
                                   style={{ background: isMe ? 'rgba(255,255,255,0.15)' : 'var(--border-light)' }}
                                 >
                                   <div className="flex items-center gap-2 min-w-0">
@@ -965,18 +981,27 @@ export default function ChatPage() {
                               )}
                             </div>
                           )}
-                        </div>
 
-                        {/* Timestamp + ticks */}
-                        <div className={`flex items-center gap-1 mt-1 px-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
-                          <span className="text-[10px]" style={{ color: 'var(--text-subtle)' }}>{formatTime(msg.timestamp)}</span>
-                          {isMe && (
-                            <span>
-                              {msg.status === 'sending'   && <Clock className="w-3 h-3" style={{ color: 'var(--text-subtle)' }} />}
-                              {msg.status === 'delivered' && <Check className="w-3.5 h-3.5" style={{ color: 'var(--text-subtle)' }} />}
-                              {msg.status === 'ack'       && <CheckCheck className="w-3.5 h-3.5" style={{ color: 'var(--primary)' }} />}
+                          {/* Inline timestamp row at bottom of bubble */}
+                          <div
+                            className={`flex items-center gap-1 mt-0.5 ${isMe ? 'justify-end' : 'justify-end'}`}
+                            style={{ marginTop: msg.text && !msg.mediaUrl ? '-14px' : '4px', float: 'right', marginLeft: '8px' }}
+                          >
+                            <span
+                              className="text-[10px] leading-none"
+                              style={{ color: isMe ? 'rgba(255,255,255,0.72)' : 'var(--text-subtle)', whiteSpace: 'nowrap' }}
+                            >
+                              {formatTime(msg.timestamp)}
                             </span>
-                          )}
+                            {isMe && (
+                              <span className="flex items-center">
+                                {msg.status === 'sending'   && <Clock className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.6)' }} />}
+                                {msg.status === 'delivered' && <Check className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.72)' }} />}
+                                {msg.status === 'ack'       && <CheckCheck className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.9)' }} />}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ clear: 'both' }} />
                         </div>
                       </div>
                     </div>
