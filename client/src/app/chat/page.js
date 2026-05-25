@@ -76,6 +76,7 @@ export default function ChatPage() {
   const [backupStatusMessage, setBackupStatusMessage] = useState({ text: '', type: '' });
   const [backupLoading, setBackupLoading] = useState(false);
   const [lastBackupTime, setLastBackupTime] = useState(null);
+  const [autoBackupEnabled, setAutoBackupEnabled] = useState(false);
 
   // Media upload states
   const [uploading, setUploading] = useState(false);
@@ -120,13 +121,20 @@ export default function ChatPage() {
     setEditAvatar(user.avatar || '');
     setCustomStatus(user.status || 'online');
 
+    // Load auto backup state from local storage
+    const savedAuto = localStorage.getItem('chapp_auto_backup_enabled') === 'true';
+    setAutoBackupEnabled(savedAuto);
+
     // 1. Establish WSS Connection
     connectSocket(token);
 
     // 2. Refresh lists from server API
     refreshFriendsAndRequests(token);
 
-    // 3. Listen for PWA installation prompts
+    // 3. Fetch latest backup metadata for auto-sync checks
+    fetchBackupInfo();
+
+    // 4. Listen for PWA installation prompts
     const handlePwaInstallable = () => setIsPwaInstallable(true);
     const handlePwaInstalled = () => setIsPwaInstallable(false);
 
@@ -172,6 +180,24 @@ export default function ChatPage() {
       setBackupPassword('');
     }
   }, [showSettings]);
+
+  // Automatic Daily Background Backup trigger
+  useEffect(() => {
+    const checkAndRunAutoBackup = async () => {
+      if (!autoBackupEnabled) return;
+      const passphrase = localStorage.getItem('chapp_auto_backup_passphrase');
+      if (!passphrase) return;
+
+      const shouldBackup = !lastBackupTime || (Date.now() - new Date(lastBackupTime).getTime() > 24 * 60 * 60 * 1000);
+      if (shouldBackup) {
+        await triggerAutoBackup(passphrase);
+      }
+    };
+    
+    // Run after a short 3-second delay on mount or when lastBackupTime is loaded
+    const timeout = setTimeout(checkAndRunAutoBackup, 3000);
+    return () => clearTimeout(timeout);
+  }, [lastBackupTime, autoBackupEnabled]);
 
   // -------------------------------------------------------------
   // REST API HANDLERS
@@ -220,6 +246,66 @@ export default function ChatPage() {
       }
     } catch (err) {
       console.error('Error fetching backup info:', err);
+    }
+  };
+
+  const triggerAutoBackup = async (passphrase) => {
+    try {
+      console.log('🔄 [Auto-Backup] Running silent background auto-backup...');
+      const chats = await db.chats.toArray();
+      const messages = await db.messages.toArray();
+      const friends = await db.friends.toArray();
+
+      const payload = {
+        chats,
+        messages,
+        friends,
+        version: 1
+      };
+
+      const serialized = JSON.stringify(payload);
+      const encryptedBlob = await encryptData(serialized, passphrase);
+      const token = localStorage.getItem('chapp_token');
+
+      const res = await fetch(`${BACKEND_URL}/api/backup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ encryptedBackup: encryptedBlob })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setLastBackupTime(data.backupUpdatedAt);
+        console.log('✅ [Auto-Backup] Silent background auto-backup completed successfully!');
+      }
+    } catch (err) {
+      console.error('❌ [Auto-Backup] Background auto-backup failed:', err);
+    }
+  };
+
+  const handleToggleAutoBackup = (e) => {
+    const checked = e.target.checked;
+    if (checked) {
+      // Enabling auto-backup: requires a password in backupPassword or existing saved
+      const savedPass = localStorage.getItem('chapp_auto_backup_passphrase');
+      if (!backupPassword && !savedPass) {
+        setBackupStatusMessage({ text: 'Please enter a backup password below first to enable auto-backup.', type: 'error' });
+        return;
+      }
+      if (backupPassword) {
+        localStorage.setItem('chapp_auto_backup_passphrase', backupPassword);
+      }
+      localStorage.setItem('chapp_auto_backup_enabled', 'true');
+      setAutoBackupEnabled(true);
+      setBackupStatusMessage({ text: 'Auto-backup enabled! We will run it in the background.', type: 'success' });
+    } else {
+      localStorage.removeItem('chapp_auto_backup_enabled');
+      localStorage.removeItem('chapp_auto_backup_passphrase');
+      setAutoBackupEnabled(false);
+      setBackupStatusMessage({ text: 'Auto-backup disabled.', type: 'info' });
     }
   };
 
@@ -1258,6 +1344,33 @@ export default function ChatPage() {
                       ? new Date(lastBackupTime).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
                       : 'None yet'}
                   </span>
+                </div>
+
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '10px 12px',
+                  borderRadius: '12px',
+                  background: 'var(--surface-2)',
+                  border: '1px solid var(--border)',
+                }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', paddingRight: '12px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>Daily Auto-Backup</span>
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Encrypts and backs up chats in the background once a day.</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={autoBackupEnabled}
+                    onChange={handleToggleAutoBackup}
+                    style={{
+                      width: '16px',
+                      height: '16px',
+                      accentColor: 'var(--primary)',
+                      cursor: 'pointer',
+                      flexShrink: 0
+                    }}
+                  />
                 </div>
 
                 {backupStatusMessage.text && (
