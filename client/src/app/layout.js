@@ -39,10 +39,9 @@ export default function RootLayout({ children }) {
   return (
     <html
       lang="en"
-      className={`${plusJakartaSans.variable} ${inter.variable} h-full dark antialiased`}
-      style={{ colorScheme: 'dark' }}
+      className={`${plusJakartaSans.variable} ${inter.variable} h-full antialiased`}
     >
-      <body className="min-h-full bg-[#0a0a0c] text-slate-100 selection:bg-cyan-500/30 selection:text-cyan-200 flex flex-col overflow-x-hidden">
+      <body className="min-h-full bg-[#f0f2f5] text-[#202124] flex flex-col overflow-x-hidden">
         <SocketProvider>
           <PwaManager />
           {children}
