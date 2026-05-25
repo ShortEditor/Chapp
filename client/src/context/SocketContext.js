@@ -40,6 +40,7 @@ export function SocketProvider({ children }) {
   const peerConnectionRef = useRef(null);
   const remoteAudioRef = useRef(null);
   const callTimerRef = useRef(null);
+  const pendingCandidatesRef = useRef([]);
 
   // Initialize background HTML5 remote audio player
   useEffect(() => {
@@ -61,6 +62,7 @@ export function SocketProvider({ children }) {
       remoteAudioRef.current.srcObject = null;
     }
     remoteStreamRef.current = null;
+    pendingCandidatesRef.current = [];
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
@@ -89,7 +91,13 @@ export function SocketProvider({ children }) {
       setCallPartner({ id: friendId, username: friendUsername });
       setCallDuration(0);
 
-      const localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const localStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
       localStreamRef.current = localStream;
 
       const pc = new RTCPeerConnection(peerConfiguration);
@@ -109,6 +117,9 @@ export function SocketProvider({ children }) {
           remoteStreamRef.current = event.streams[0];
           if (remoteAudioRef.current) {
             remoteAudioRef.current.srcObject = event.streams[0];
+            remoteAudioRef.current.play().catch(e => {
+              console.warn('🔊 [WebRTC] Playback blocked or failed:', e);
+            });
           }
         }
       };
@@ -130,7 +141,13 @@ export function SocketProvider({ children }) {
     if (!callPartner || callState !== 'ringing') return;
     try {
       console.log('📞 [WebRTC] Answering call from:', callPartner.username);
-      const localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const localStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
       localStreamRef.current = localStream;
 
       const pc = new RTCPeerConnection(peerConfiguration);
@@ -150,6 +167,9 @@ export function SocketProvider({ children }) {
           remoteStreamRef.current = event.streams[0];
           if (remoteAudioRef.current) {
             remoteAudioRef.current.srcObject = event.streams[0];
+            remoteAudioRef.current.play().catch(e => {
+              console.warn('🔊 [WebRTC] Playback blocked or failed:', e);
+            });
           }
         }
       };
@@ -168,6 +188,16 @@ export function SocketProvider({ children }) {
 
       setCallState('connected');
       startCallTimer();
+
+      // Process queued ICE candidates
+      while (pendingCandidatesRef.current.length > 0) {
+        const cand = pendingCandidatesRef.current.shift();
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(cand));
+        } catch (err) {
+          console.error('Error processing queued ICE candidate:', err);
+        }
+      }
     } catch (err) {
       console.error('❌ [WebRTC] Failed to answer call:', err);
       cleanupCall();
@@ -225,6 +255,31 @@ export function SocketProvider({ children }) {
     }
   }, [syncPendingTicks]);
 
+  const flushOfflineMessages = useCallback(async (activeSocket) => {
+    const socketToUse = activeSocket || socketRef.current;
+    if (!socketToUse || !socketToUse.connected) return;
+
+    try {
+      console.log('🔄 [SocketContext] Checking for unsent offline messages...');
+      const unsent = await db.messages.where('status').equals('sending').toArray();
+      if (unsent.length === 0) return;
+
+      console.log(`🔄 [SocketContext] Flushing ${unsent.length} offline messages...`);
+      for (const msg of unsent) {
+        socketToUse.emit('send-message', {
+          id: msg.id,
+          receiverId: msg.receiverId,
+          text: msg.text,
+          mediaUrl: msg.mediaUrl,
+          mediaType: msg.mediaType,
+          timestamp: msg.timestamp
+        });
+      }
+    } catch (err) {
+      console.error('❌ [SocketContext] Error flushing offline messages:', err);
+    }
+  }, []);
+
   const connectSocket = useCallback((token) => {
     // Don't reconnect if already connected
     if (socketRef.current && socketRef.current.connected) {
@@ -250,6 +305,7 @@ export function SocketProvider({ children }) {
     newSocket.on('connect', () => {
       console.log('✅ [SocketContext] Connected! Socket ID:', newSocket.id);
       setIsConnected(true);
+      flushOfflineMessages(newSocket);
       if (activeChatRef.current) {
         syncPendingTicks(activeChatRef.current);
       }
@@ -368,6 +424,16 @@ export function SocketProvider({ children }) {
           await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(answer));
           setCallState('connected');
           startCallTimer();
+
+          // Process queued ICE candidates
+          while (pendingCandidatesRef.current.length > 0) {
+            const cand = pendingCandidatesRef.current.shift();
+            try {
+              await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(cand));
+            } catch (err) {
+              console.error('Error processing queued ICE candidate:', err);
+            }
+          }
         } catch (err) {
           console.error('Error setting remote answer:', err);
         }
@@ -390,12 +456,15 @@ export function SocketProvider({ children }) {
     });
 
     newSocket.on('ice-candidate', async ({ candidate }) => {
-      if (peerConnectionRef.current) {
+      const pc = peerConnectionRef.current;
+      if (pc && pc.remoteDescription) {
         try {
-          await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
         } catch (err) {
           console.error('Error adding remote ICE candidate:', err);
         }
+      } else {
+        pendingCandidatesRef.current.push(candidate);
       }
     });
 
@@ -459,11 +528,7 @@ export function SocketProvider({ children }) {
   // SEND MESSAGE — uses ref so never has stale socket
   const sendMessage = useCallback(async (receiverId, text, mediaUrl = null, mediaType = null) => {
     const activeSocket = socketRef.current;
-
-    if (!activeSocket || !activeSocket.connected) {
-      console.warn('⚠️ [SocketContext] Cannot send: socket not connected. Connected:', activeSocket?.connected, 'URL:', BACKEND_URL);
-      return null;
-    }
+    const isOnline = activeSocket && activeSocket.connected;
 
     const messageId = crypto.randomUUID();
     const timestamp = Date.now();
@@ -490,16 +555,20 @@ export function SocketProvider({ children }) {
         unreadCount: 0
       });
 
-      activeSocket.emit('send-message', {
-        id: messageId,
-        receiverId,
-        text,
-        mediaUrl,
-        mediaType,
-        timestamp
-      });
+      if (isOnline) {
+        activeSocket.emit('send-message', {
+          id: messageId,
+          receiverId,
+          text,
+          mediaUrl,
+          mediaType,
+          timestamp
+        });
+        console.log('📤 [SocketContext] Message sent (online):', messageId);
+      } else {
+        console.log('⏳ [SocketContext] Device is offline. Message queued in local IndexedDB:', messageId);
+      }
 
-      console.log('📤 [SocketContext] Message sent:', messageId);
       return localMessage;
     } catch (err) {
       console.error('❌ [SocketContext] Failed to send message:', err);

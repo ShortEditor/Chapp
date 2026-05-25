@@ -42,6 +42,38 @@ import { encryptData, decryptData } from '@/lib/crypto';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
+const renderUsername = (username, textStyle = {}) => {
+  if (username === 'ShortEditor') {
+    return (
+      <span className="inline-flex items-center gap-1" style={textStyle}>
+        <span>ShortEditor</span>
+        <svg 
+          className="w-4 h-4 shrink-0 inline-block" 
+          viewBox="0 0 24 24" 
+          fill="none"
+        >
+          <path 
+            d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" 
+            stroke="#1d9bf0" 
+            strokeWidth="2" 
+            strokeLinecap="round" 
+            strokeLinejoin="round"
+            fill="#1d9bf0"
+          />
+          <path 
+            d="M9 12l2 2 4-4" 
+            stroke="#fff" 
+            strokeWidth="1.8" 
+            strokeLinecap="round" 
+            strokeLinejoin="round"
+          />
+        </svg>
+      </span>
+    );
+  }
+  return <span style={textStyle}>{username || ''}</span>;
+};
+
 export default function ChatPage() {
   const router = useRouter();
   const {
@@ -81,6 +113,7 @@ export default function ChatPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [editBio, setEditBio] = useState('');
   const [editAvatar, setEditAvatar] = useState('');
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [customStatus, setCustomStatus] = useState('');
 
   // Zero-Knowledge Backup states
@@ -304,10 +337,46 @@ export default function ChatPage() {
         },
         body: JSON.stringify({ subscription })
       });
-
-      console.log('✅ [Push] Successfully subscribed to Push Notifications!');
     } catch (err) {
-      console.error('❌ [Push] Subscription registration failed:', err);
+      console.error('❌ Failed to register push notifications:', err);
+    }
+  };
+
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setAvatarUploading(true);
+    setBackupStatusMessage({ text: 'Uploading avatar to Cloudinary...', type: 'info' });
+
+    try {
+      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'chapp-demo';
+      const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'avatar_preset';
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', uploadPreset);
+
+      console.log('☁️ [Cloudinary] Uploading avatar...');
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!res.ok) {
+        throw new Error('Cloudinary upload failed. Check your Cloud Name or Preset credentials.');
+      }
+
+      const data = await res.json();
+      const imageUrl = data.secure_url;
+
+      setEditAvatar(imageUrl);
+      setBackupStatusMessage({ text: 'Avatar uploaded successfully! Make sure to click Save Changes below.', type: 'success' });
+    } catch (err) {
+      console.error(err);
+      setBackupStatusMessage({ text: `Avatar upload failed: ${err.message}`, type: 'error' });
+    } finally {
+      setAvatarUploading(false);
     }
   };
 
@@ -646,13 +715,6 @@ export default function ChatPage() {
     e.preventDefault();
     if (!inputText.trim() && !pendingMedia) return;
 
-    // Guard: socket must be connected
-    if (!isConnected) {
-      setSendError('Not connected to server. Please wait or refresh the page.');
-      setTimeout(() => setSendError(''), 4000);
-      return;
-    }
-
     setSendError('');
     const result = await sendMessage(
       activeFriend.id,
@@ -662,7 +724,7 @@ export default function ChatPage() {
     );
 
     if (!result) {
-      setSendError('Failed to send. Socket may have disconnected — retrying...');
+      setSendError('Failed to save message. IndexedDB may be full.');
       setTimeout(() => setSendError(''), 4000);
       return;
     }
@@ -847,8 +909,8 @@ export default function ChatPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-semibold truncate" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>
-                          {friend?.username || 'Chapp User'}
+                        <span className="text-sm font-semibold truncate flex items-center gap-1" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>
+                          {renderUsername(friend?.username || 'Chapp User')}
                         </span>
                         <span className="text-[10px] shrink-0 ml-2" style={{ color: 'var(--text-subtle)' }}>
                           {formatTime(chat.lastMessageTime)}
@@ -937,7 +999,7 @@ export default function ChatPage() {
                         {isOnline && <span className="status-dot status-online" style={{ borderColor: 'var(--surface-2)' }} />}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold truncate" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>{friend.username}</p>
+                        <p className="text-sm font-semibold truncate flex items-center gap-1" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>{renderUsername(friend.username)}</p>
                         <p className="text-xs truncate" style={{ color: isOnline ? 'var(--online)' : 'var(--text-subtle)' }}>
                           {isOnline ? 'Online' : 'Offline'}
                         </p>
@@ -969,7 +1031,7 @@ export default function ChatPage() {
                             : u.username.slice(0, 2)}
                         </div>
                         <div>
-                          <p className="text-sm font-semibold" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>{u.username}</p>
+                          <p className="text-sm font-semibold flex items-center gap-1" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>{renderUsername(u.username)}</p>
                           <p className="text-xs" style={{ color: 'var(--text-subtle)' }}>
                             {req.isOutgoing ? 'Request sent' : 'Wants to connect'}
                           </p>
@@ -1076,8 +1138,8 @@ export default function ChatPage() {
                 </div>
 
                 <div>
-                  <h3 className="text-sm font-bold truncate" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>
-                    {activeFriend.username}
+                  <h3 className="text-sm font-bold truncate flex items-center gap-1" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>
+                    {renderUsername(activeFriend.username)}
                   </h3>
                   <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
                     {typingFriends.has(activeFriend.id) ? (
@@ -1122,8 +1184,10 @@ export default function ChatPage() {
                   <p className="font-semibold text-sm" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>
                     Start the conversation
                   </p>
-                  <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-                    Say hi to {activeFriend.username}! 👋
+                  <p className="text-xs mt-1 flex items-center justify-center gap-1" style={{ color: 'var(--text-muted)' }}>
+                    <span>Say hi to</span>
+                    {renderUsername(activeFriend.username)}
+                    <span>! 👋</span>
                   </p>
                 </div>
               ) : (
@@ -1301,14 +1365,14 @@ export default function ChatPage() {
                 </div>
               )}
 
-              <form onSubmit={handleSendMessage} className="flex items-center gap-2">
+              <form onSubmit={handleSendMessage} className="flex items-center gap-4">
                 <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*,video/*,application/*" />
 
                 <button
                   type="button"
                   onClick={triggerFileSelector}
                   disabled={uploading}
-                  className="p-2.5 rounded-full transition-colors shrink-0"
+                  className="p-3.5 rounded-full transition-colors shrink-0"
                   style={{ color: 'var(--text-muted)' }}
                   onMouseEnter={e => e.currentTarget.style.background = 'var(--border-light)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
@@ -1327,11 +1391,14 @@ export default function ChatPage() {
 
                 <button
                   type="submit"
-                  disabled={(!inputText.trim() && !pendingMedia) || !isConnected}
-                  className="p-2.5 rounded-full text-white shrink-0 flex items-center justify-center transition-opacity disabled:opacity-40"
-                  style={{ background: 'var(--primary)' }}
+                  disabled={!inputText.trim() && !pendingMedia}
+                  className="w-11 h-11 rounded-full text-white shrink-0 flex items-center justify-center transition-all disabled:opacity-40 disabled:pointer-events-none hover:scale-105 active:scale-95 shadow-md border-none cursor-pointer"
+                  style={{ 
+                    background: 'linear-gradient(135deg, var(--primary) 0%, #4a5cf6 100%)',
+                    boxShadow: '0 4px 12px rgba(26, 115, 232, 0.25)'
+                  }}
                 >
-                  <Send className="w-5 h-5" />
+                  <Send className="w-5 h-5" style={{ transform: 'rotate(-15deg) translate(1px, -1px)' }} />
                 </button>
               </form>
             </div>
@@ -1407,7 +1474,11 @@ export default function ChatPage() {
                   style={{
                     background: settingsTab === tab ? 'var(--primary-light)' : 'transparent',
                     color: settingsTab === tab ? 'var(--primary)' : 'var(--text-muted)',
-                    fontFamily: 'var(--font-jakarta)'
+                    fontFamily: 'var(--font-jakarta)',
+                    border: 'none',
+                    outline: 'none',
+                    boxShadow: 'none',
+                    cursor: 'pointer'
                   }}
                 >
                   {tab === 'backup' && <Database className="w-3.5 h-3.5" />}
@@ -1418,9 +1489,52 @@ export default function ChatPage() {
 
             {/* Profile Tab */}
             {settingsTab === 'profile' && (
-              <form onSubmit={handleUpdateProfile} className="space-y-4">
-                <div>
-                  <label className="label-text">Avatar Image URL</label>
+              <form onSubmit={handleUpdateProfile} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                {/* Visual Avatar Preview & Cloudinary Upload */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', paddingBottom: '8px' }}>
+                  <label 
+                    className="w-24 h-24 rounded-full border-2 flex items-center justify-center overflow-hidden shrink-0 relative group cursor-pointer hover:opacity-95 active:scale-95 transition-all"
+                    style={{ 
+                      background: getAvatarColor(currentUser?.username),
+                      borderColor: 'var(--primary)',
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.1)'
+                    }}
+                    title="Click circle to directly upload avatar"
+                  >
+                    {editAvatar?.startsWith('http') ? (
+                      <img src={editAvatar} alt="preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-2xl font-bold text-white">{currentUser?.username?.slice(0, 2).toUpperCase()}</span>
+                    )}
+                    
+                    {/* Hover Overlay with Camera Icon */}
+                    <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-opacity text-white gap-1 select-none">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      <span className="text-[9px] font-bold uppercase tracking-wider">Change</span>
+                    </div>
+
+                    {avatarUploading && (
+                      <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                        <RefreshCw className="w-6 h-6 text-white animate-spin" />
+                      </div>
+                    )}
+
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleAvatarUpload} 
+                      className="hidden" 
+                      disabled={avatarUploading}
+                    />
+                  </label>
+                  <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-1 select-none">Tap circle to upload</p>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label className="label-text">Or Paste Photo URL</label>
                   <input
                     type="text"
                     placeholder="Paste an image URL..."
@@ -1429,7 +1543,7 @@ export default function ChatPage() {
                     className="modal-input"
                   />
                 </div>
-                <div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <label className="label-text">Bio</label>
                   <textarea
                     placeholder="Tell your friends about you..."
@@ -1439,8 +1553,8 @@ export default function ChatPage() {
                     className="modal-input resize-none"
                   />
                 </div>
-                <div className="flex gap-2 pt-1">
-                  <button type="button" onClick={() => setShowSettings(false)} className="btn-ghost flex-1">Cancel</button>
+                <div className="flex gap-3 pt-3">
+                  <button type="button" onClick={() => { setShowSettings(false); setBackupStatusMessage({ text: '', type: '' }); }} className="btn-ghost flex-1">Cancel</button>
                   <button type="submit" className="btn-blue flex-1">Save Changes</button>
                 </div>
               </form>
@@ -1448,7 +1562,7 @@ export default function ChatPage() {
 
             {/* Backup Tab */}
             {settingsTab === 'backup' && (
-              <div className="space-y-4">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                 <div
                   className="flex gap-2.5 p-3 rounded-xl text-xs"
                   style={{ background: 'var(--primary-light)', color: 'var(--primary)', border: '1px solid var(--primary-container)' }}
@@ -1510,7 +1624,7 @@ export default function ChatPage() {
                   </div>
                 )}
 
-                <div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <label className="label-text">Backup Passphrase</label>
                   <div className="relative">
                     <input
@@ -1526,7 +1640,7 @@ export default function ChatPage() {
                   </div>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex gap-3 pt-3">
                   <button
                     type="button"
                     onClick={handleBackup}
@@ -1663,38 +1777,47 @@ export default function ChatPage() {
             }}
           >
             {/* Pulsing Ring Avatar Container */}
-            <div style={{ position: 'relative', marginBottom: '24px' }}>
-              <div 
-                className={callState === 'ringing' || callState === 'calling' ? 'animate-ping' : ''}
-                style={{
-                  position: 'absolute',
-                  inset: '-10px',
-                  borderRadius: '50%',
-                  background: 'var(--primary-light)',
-                  opacity: 0.15,
-                  animationDuration: '2s'
-                }}
-              />
-              <div 
-                className="w-24 h-24 rounded-full text-2xl font-bold text-white flex items-center justify-center shadow-2xl relative z-10"
-                style={{ 
-                  background: getAvatarColor(callPartner.username),
-                  boxShadow: '0 8px 30px rgba(0,0,0,0.3)'
-                }}
-              >
-                {callPartner.username.slice(0, 2).toUpperCase()}
-              </div>
-            </div>
+            {(() => {
+              const partner = dbFriends.find(f => f.id === callPartner.id) || callPartner;
+              return (
+                <div style={{ position: 'relative', marginBottom: '24px' }}>
+                  <div 
+                    className={callState === 'ringing' || callState === 'calling' ? 'animate-ping' : ''}
+                    style={{
+                      position: 'absolute',
+                      inset: '-10px',
+                      borderRadius: '50%',
+                      background: 'var(--primary-light)',
+                      opacity: 0.15,
+                      animationDuration: '2s'
+                    }}
+                  />
+                  <div 
+                    className="w-24 h-24 rounded-full text-2xl font-bold text-white flex items-center justify-center shadow-2xl relative z-10 overflow-hidden"
+                    style={{ 
+                      background: getAvatarColor(partner.username),
+                      boxShadow: '0 8px 30px rgba(0,0,0,0.3)'
+                    }}
+                  >
+                    {partner.avatar?.startsWith('http') ? (
+                      <img src={partner.avatar} alt={partner.username} className="w-full h-full object-cover" />
+                    ) : (
+                      partner.username?.slice(0, 2).toUpperCase()
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Title / Partner name */}
-            <h2 style={{ 
+            <h2 className="flex items-center gap-1.5 justify-center" style={{ 
               fontSize: '20px', 
               fontWeight: 700, 
               color: '#fff', 
               fontFamily: 'var(--font-display)',
               marginBottom: '8px'
             }}>
-              {callPartner.username}
+              {renderUsername(callPartner.username)}
             </h2>
 
             {/* Calling state description */}
