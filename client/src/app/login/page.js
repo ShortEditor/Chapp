@@ -226,7 +226,7 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full py-3 rounded-xl text-sm font-semibold bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white shadow-lg shadow-cyan-500/15 hover:shadow-cyan-500/25 transition-all duration-300 transform active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none mt-2"
           >
-            {loading ? 'Entering Nebula...' : 'Access Private Account'}
+            {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
 
@@ -234,7 +234,7 @@ export default function LoginPage() {
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-white/5"></div>
           </div>
-          <span className="relative px-3 text-[10px] font-bold uppercase tracking-widest text-slate-500 bg-[#08080a]">Or Connect via</span>
+          <span className="relative px-3 text-[10px] font-bold uppercase tracking-widest text-slate-500 bg-[#08080a]">or</span>
         </div>
 
         {/* Google Authentication Button */}
@@ -265,9 +265,9 @@ export default function LoginPage() {
         </button>
 
         <p className="text-center text-xs text-slate-500 mt-6">
-          New to Chapp?{' '}
+          Don't have an account?{' '}
           <Link href="/signup" className="text-cyan-400 hover:text-cyan-300 font-medium hover:underline transition-all">
-            Establish Identity
+            Sign Up
           </Link>
         </p>
       </div>
@@ -278,15 +278,15 @@ export default function LoginPage() {
           <div className="w-full max-w-[360px] glass-panel rounded-2xl p-6 border border-cyan-500/20">
             <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2 mb-2">
               <Sparkles className="w-5 h-5 text-cyan-400 animate-pulse" />
-              Google Login Demo Mode
+              Demo Mode Login
             </h3>
             <p className="text-xs text-slate-400 leading-relaxed mb-4">
-              Your client Firebase configuration is not set. To allow seamless testing, enter any nickname below to simulate a real secure Google Auth relay!
+              Google Sign-In is not configured yet. To test the application, simply enter any nickname below to log in as a guest!
             </p>
             <div className="space-y-3">
               <input
                 type="text"
-                placeholder="Google Nickname (e.g. Alice)"
+                placeholder="Choose a nickname (e.g. Alice)"
                 className="w-full px-4 py-2.5 rounded-xl text-xs glass-input text-slate-100"
                 id="demo-user-input"
                 onKeyDown={(e) => {
@@ -307,9 +307,9 @@ export default function LoginPage() {
                     const val = document.getElementById('demo-user-input')?.value;
                     if (val) executeDemoLogin(val);
                   }}
-                  className="flex-1 py-2 text-xs font-semibold rounded-lg bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 text-white shadow-md shadow-cyan-500/10"
+                  className="flex-1 py-2 text-xs font-semibold rounded-lg bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 text-[#070709] font-bold shadow-md shadow-cyan-500/10"
                 >
-                  Join Demo
+                  Log In
                 </button>
               </div>
             </div>

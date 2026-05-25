@@ -444,8 +444,8 @@ export default function ChatPage() {
               <Sparkles className="w-4 h-4" />
             </div>
             <div className="flex-1 min-w-0">
-              <h4 className="text-xs font-semibold text-slate-200">Install Chapp Desktop</h4>
-              <p className="text-[10px] text-slate-400 mt-0.5 leading-normal">Get secure standalone viewport and offline access.</p>
+              <h4 className="text-xs font-semibold text-slate-200">Install Chapp App</h4>
+              <p className="text-[10px] text-slate-400 mt-0.5 leading-normal">Install Chapp on your device for offline support and quick access.</p>
               <button
                 onClick={triggerPwaInstallation}
                 className="mt-2.5 px-3 py-1 bg-cyan-500 hover:bg-cyan-400 text-[#070709] font-bold text-[10px] rounded-lg tracking-wider uppercase transition-all duration-300 active:scale-95 shadow-md shadow-cyan-500/25"
@@ -524,7 +524,7 @@ export default function ChatPage() {
                           )}
                         </div>
                         <div className="min-w-0">
-                          <h4 className="text-xs font-semibold text-slate-200 truncate uppercase tracking-wider">{friend?.username || 'Synced Contact'}</h4>
+                          <h4 className="text-xs font-semibold text-slate-200 truncate uppercase tracking-wider">{friend?.username || 'Chapp User'}</h4>
                           <p className={`text-[10px] truncate leading-tight mt-0.5 ${isTyping ? 'text-cyan-400 font-medium' : 'text-slate-400'}`}>
                             {isTyping ? 'Typing...' : chat.lastMessageText}
                           </p>
@@ -553,7 +553,7 @@ export default function ChatPage() {
               <form onSubmit={handleAddFriend} className="px-1 flex gap-2">
                 <input
                   type="text"
-                  placeholder="Enter custom username..."
+                  placeholder="Enter friend's username..."
                   value={newFriendUsername}
                   onChange={(e) => setNewFriendUsername(e.target.value)}
                   className="flex-1 px-3 py-2 text-xs rounded-xl glass-input text-slate-100 placeholder:text-slate-600 focus:ring-1 focus:ring-cyan-500"
@@ -576,8 +576,8 @@ export default function ChatPage() {
                 {dbFriends.length === 0 ? (
                   <div className="flex flex-col items-center justify-center text-center h-[150px] text-slate-500">
                     <Users className="w-7 h-7 opacity-30 mb-1" />
-                    <p className="text-[11px]">No friends connected.</p>
-                    <p className="text-[9px] opacity-70 mt-0.5 max-w-[180px]">Add them by username above to initialize private relay.</p>
+                    <p className="text-[11px]">No friends yet.</p>
+                    <p className="text-[9px] opacity-70 mt-0.5 max-w-[180px]">Add your friends by their username above to start chatting!</p>
                   </div>
                 ) : (
                   dbFriends.map(friend => {
@@ -651,7 +651,7 @@ export default function ChatPage() {
                         </div>
                         <div className="min-w-0">
                           <h4 className="text-xs font-semibold text-slate-200 truncate uppercase tracking-wider">{reqUser.username}</h4>
-                          <p className="text-[8px] text-slate-500 truncate">Outgoing: {req.isOutgoing ? 'Yes' : 'No (Requires Action)'}</p>
+                          <p className="text-[8px] text-slate-500 truncate">{req.isOutgoing ? 'Sent request (awaiting response)' : 'Received request'}</p>
                         </div>
                       </div>
 
@@ -734,8 +734,8 @@ export default function ChatPage() {
               {messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-slate-500 text-center select-none">
                   <Sparkles className="w-8 h-8 opacity-20 mb-2 animate-bounce" />
-                  <p className="text-xs">Establish Secure Tunnel</p>
-                  <p className="text-[10px] opacity-70 mt-1 max-w-[240px]">This is the beginning of a secure private relay. Type below to encrypt and send.</p>
+                  <p className="text-xs">No Messages Yet</p>
+                  <p className="text-[10px] opacity-70 mt-1 max-w-[240px]">This is the start of your secure chat history. Type a message below to say hello!</p>
                 </div>
               ) : (
                 messages.map(msg => {
@@ -882,7 +882,7 @@ export default function ChatPage() {
                 <div className="flex-1 relative flex items-center">
                   <input
                     type="text"
-                    placeholder="Enter encrypted payload..."
+                    placeholder="Type a message..."
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
                     onKeyDown={handleInputKeyDown}
@@ -916,7 +916,7 @@ export default function ChatPage() {
               <Sparkles className="w-10 h-10 text-white" />
             </div>
             
-            <h2 className="text-2xl font-bold bg-gradient-to-r from-slate-100 to-slate-400 bg-clip-text text-transparent tracking-tight">Nebula Channel Secure</h2>
+            <h2 className="text-2xl font-bold bg-gradient-to-r from-slate-100 to-slate-400 bg-clip-text text-transparent tracking-tight">Chapp Secure Chat</h2>
             <p className="text-xs text-slate-400 mt-2 max-w-[320px] leading-relaxed">
               "Your conversations belong to you."
             </p>
@@ -927,9 +927,9 @@ export default function ChatPage() {
                   <Info className="w-5 h-5" />
                 </div>
                 <div className="text-left min-w-0">
-                  <h4 className="text-xs font-semibold text-slate-200 uppercase tracking-wider">Zero-Server Storage</h4>
+                  <h4 className="text-xs font-semibold text-slate-200 uppercase tracking-wider">Private local storage</h4>
                   <p className="text-[10px] text-slate-400 leading-relaxed mt-1">
-                    All chat logs are compiled directly inside your browser's IndexedDB. Our server acts solely as a transient, memory-queue relay. Relayed logs are automatically deleted immediately.
+                    Your messages are stored only on your device. Our server relays your messages but never saves them permanently.
                   </p>
                 </div>
               </div>

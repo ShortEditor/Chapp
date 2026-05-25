@@ -84,8 +84,8 @@ export default function SignupPage() {
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-cyan-500 to-indigo-500 flex items-center justify-center shadow-lg shadow-cyan-500/20 mb-4 ring-1 ring-white/10">
             <Sparkles className="w-7 h-7 text-white" />
           </div>
-          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-slate-100 to-slate-400 bg-clip-text text-transparent">Establish Identity</h1>
-          <p className="text-sm text-slate-400 mt-2 text-center">Create a new local-first secure profile.</p>
+          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-slate-100 to-slate-400 bg-clip-text text-transparent">Sign Up</h1>
+          <p className="text-sm text-slate-400 mt-2 text-center">Create a new private profile to get started.</p>
         </div>
 
         {error && (
@@ -137,14 +137,14 @@ export default function SignupPage() {
             disabled={loading}
             className="w-full py-3 rounded-xl text-sm font-semibold bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white shadow-lg shadow-cyan-500/15 hover:shadow-cyan-500/25 transition-all duration-300 transform active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none mt-4"
           >
-            {loading ? 'Generating keys...' : 'Create Account'}
+            {loading ? 'Signing up...' : 'Create Account'}
           </button>
         </form>
 
         <p className="text-center text-xs text-slate-500 mt-6">
-          Already have an identity?{' '}
+          Already have an account?{' '}
           <Link href="/login" className="text-cyan-400 hover:text-cyan-300 font-medium hover:underline transition-all">
-            Access Account
+            Sign In
           </Link>
         </p>
       </div>
