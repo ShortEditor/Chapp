@@ -21,6 +21,7 @@ model User {
   // Zero-Knowledge Encrypted Backup
   encryptedBackup String?
   backupUpdatedAt DateTime?
+  pushSubscription String?
 
   // Relationships
   sentRequests     Friendship[] @relation("SentFriendships")

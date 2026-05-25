@@ -85,3 +85,55 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
+
+// 🤖 [Push Listener] Listen to incoming push events from push servers
+self.addEventListener('push', (event) => {
+  console.log('🤖 [Service Worker] Received push event.');
+  let data = {};
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch (err) {
+      data = {
+        title: 'New Notification',
+        body: event.data.text()
+      };
+    }
+  }
+
+  const options = {
+    body: data.body || 'You have a new message!',
+    icon: data.icon || '/favicon.ico',
+    badge: data.badge || '/favicon.ico',
+    vibrate: [100, 50, 100],
+    data: {
+      url: data.url || '/chat'
+    }
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'Chapp', options)
+  );
+});
+
+// 🤖 [Notification Click] Focus target tab or open a new window
+self.addEventListener('notificationclick', (event) => {
+  console.log('🤖 [Service Worker] Notification clicked.');
+  event.notification.close();
+
+  const targetUrl = event.notification.data?.url || '/chat';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      for (let i = 0; i < windowClients.length; i++) {
+        const client = windowClients[i];
+        if (client.url.includes(targetUrl) && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+    })
+  );
+});

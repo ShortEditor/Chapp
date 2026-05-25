@@ -31,7 +31,11 @@ import {
   Database,
   Key,
   Lock,
-  RefreshCw
+  RefreshCw,
+  Phone,
+  PhoneOff,
+  Mic,
+  MicOff
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { encryptData, decryptData } from '@/lib/crypto';
@@ -50,7 +54,16 @@ export default function ChatPage() {
     disconnectSocket,
     sendMessage,
     emitTyping,
-    setActiveChat
+    setActiveChat,
+    callState,
+    callPartner,
+    isMuted,
+    callDuration,
+    initiateCall,
+    answerIncomingCall,
+    rejectIncomingCall,
+    endActiveCall,
+    toggleMute
   } = useSocket();
 
   // Local React states
@@ -135,7 +148,10 @@ export default function ChatPage() {
     // 3. Fetch latest backup metadata for auto-sync checks
     fetchBackupInfo();
 
-    // 4. Listen for PWA installation prompts
+    // 4. Register Web Push notification token dynamically
+    setTimeout(registerPushNotifications, 2000);
+
+    // 5. Listen for PWA installation prompts
     const handlePwaInstallable = () => setIsPwaInstallable(true);
     const handlePwaInstalled = () => setIsPwaInstallable(false);
 
@@ -239,6 +255,59 @@ export default function ChatPage() {
       }
     } catch (err) {
       console.error('❌ Failed to fetch friends list:', err);
+    }
+  };
+
+  const registerPushNotifications = async () => {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      console.warn('⚠️ Push notifications not supported on this browser.');
+      return;
+    }
+
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        console.log('🚫 Notification permission denied.');
+        return;
+      }
+
+      // 1. Fetch VAPID public key from backend
+      const res = await fetch(`${BACKEND_URL}/api/notifications/vapidPublicKey`);
+      if (!res.ok) throw new Error('Failed to fetch VAPID public key.');
+      const { publicKey } = await res.json();
+
+      // Convert VAPID public key to Uint8Array
+      const padding = '='.repeat((4 - publicKey.length % 4) % 4);
+      const base64 = (publicKey + padding).replace(/\-/g, '+').replace(/_/g, '/');
+      const rawData = window.atob(base64);
+      const outputArray = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+      }
+
+      // 2. Get Service Worker Registration
+      const registration = await navigator.serviceWorker.ready;
+      
+      // 3. Register Subscription
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: outputArray
+      });
+
+      // 4. Send subscription to server
+      const token = localStorage.getItem('chapp_token');
+      await fetch(`${BACKEND_URL}/api/notifications/subscribe`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ subscription })
+      });
+
+      console.log('✅ [Push] Successfully subscribed to Push Notifications!');
+    } catch (err) {
+      console.error('❌ [Push] Subscription registration failed:', err);
     }
   };
 
@@ -973,7 +1042,7 @@ export default function ChatPage() {
           <>
             {/* Chat Header */}
             <div
-              className="flex items-center gap-3 px-4 shrink-0"
+              className="flex items-center justify-between px-4 shrink-0"
               style={{ 
                 background: 'var(--surface)', 
                 borderBottom: '1px solid var(--border)',
@@ -984,42 +1053,60 @@ export default function ChatPage() {
                 minHeight: '64px'
               }}
             >
-              <button
-                onClick={() => setActiveFriend(null)}
-                className="md:hidden p-2 rounded-full transition-colors mr-1"
-                style={{ color: 'var(--text-muted)' }}
-                onMouseEnter={e => e.currentTarget.style.background = 'var(--border-light)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-              >
-                <ArrowLeft className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-3 min-w-0">
+                <button
+                  onClick={() => setActiveFriend(null)}
+                  className="md:hidden p-2 rounded-full transition-colors mr-1"
+                  style={{ color: 'var(--text-muted)' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--border-light)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
 
-              <div className="relative shrink-0">
-                <div className="avatar w-10 h-10 text-sm" style={{ background: getAvatarColor(activeFriend.username) }}>
-                  {activeFriend.avatar?.startsWith('http')
-                    ? <img src={activeFriend.avatar} alt={activeFriend.username} className="w-full h-full object-cover" />
-                    : activeFriend.username.slice(0, 2)}
-                </div>
-                {onlineFriends.get(activeFriend.id) === 'online' && (
-                  <span className="status-dot status-online" style={{ borderColor: 'var(--surface)' }} />
-                )}
-              </div>
-
-              <div>
-                <h3 className="text-sm font-bold" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>
-                  {activeFriend.username}
-                </h3>
-                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                  {typingFriends.has(activeFriend.id) ? (
-                    <span className="flex items-center gap-1" style={{ color: 'var(--primary)' }}>
-                      <span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" />
-                      <span className="ml-1">typing</span>
-                    </span>
-                  ) : (
-                    onlineFriends.get(activeFriend.id) === 'online' ? 'Online' : 'Offline'
+                <div className="relative shrink-0">
+                  <div className="avatar w-10 h-10 text-sm" style={{ background: getAvatarColor(activeFriend.username) }}>
+                    {activeFriend.avatar?.startsWith('http')
+                      ? <img src={activeFriend.avatar} alt={activeFriend.username} className="w-full h-full object-cover" />
+                      : activeFriend.username.slice(0, 2)}
+                  </div>
+                  {onlineFriends.get(activeFriend.id) === 'online' && (
+                    <span className="status-dot status-online" style={{ borderColor: 'var(--surface)' }} />
                   )}
-                </p>
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-bold truncate" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>
+                    {activeFriend.username}
+                  </h3>
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    {typingFriends.has(activeFriend.id) ? (
+                      <span className="flex items-center gap-1" style={{ color: 'var(--primary)' }}>
+                        <span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" />
+                        <span className="ml-1">typing</span>
+                      </span>
+                    ) : (
+                      onlineFriends.get(activeFriend.id) === 'online' ? 'Online' : 'Offline'
+                    )}
+                  </p>
+                </div>
               </div>
+
+              {/* Call Trigger Button */}
+              {onlineFriends.get(activeFriend.id) === 'online' && (
+                <button
+                  onClick={() => initiateCall(activeFriend.id, activeFriend.username)}
+                  className="p-2.5 rounded-full transition-all hover:scale-105 active:scale-95 cursor-pointer shrink-0 flex items-center justify-center"
+                  style={{ 
+                    background: 'var(--primary-light)', 
+                    color: 'var(--primary)',
+                    border: '1px solid var(--primary-container)'
+                  }}
+                  title="Start Voice Call"
+                >
+                  <Phone className="w-4 h-4" />
+                </button>
+              )}
             </div>
 
             {/* Messages Feed */}
@@ -1535,6 +1622,148 @@ export default function ChatPage() {
                 border: '1px solid rgba(255,255,255,0.15)'
               }}
             />
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════
+          VOICE CALL OVERLAY MODAL
+          ═══════════════════════════════════════ */}
+      {callState !== 'idle' && callPartner && (
+        <div 
+          className="modal-overlay animate-fade-in" 
+          style={{ 
+            zIndex: 10001, 
+            background: 'rgba(10, 11, 14, 0.95)', 
+            backdropFilter: 'blur(15px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+          }}
+        >
+          <div 
+            className="animate-zoom-in"
+            style={{ 
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: '24px',
+              padding: '40px',
+              width: '100%',
+              maxWidth: '360px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              textAlign: 'center',
+              boxShadow: '0 30px 60px rgba(0,0,0,0.6)',
+            }}
+          >
+            {/* Pulsing Ring Avatar Container */}
+            <div style={{ position: 'relative', marginBottom: '24px' }}>
+              <div 
+                className={callState === 'ringing' || callState === 'calling' ? 'animate-ping' : ''}
+                style={{
+                  position: 'absolute',
+                  inset: '-10px',
+                  borderRadius: '50%',
+                  background: 'var(--primary-light)',
+                  opacity: 0.15,
+                  animationDuration: '2s'
+                }}
+              />
+              <div 
+                className="w-24 h-24 rounded-full text-2xl font-bold text-white flex items-center justify-center shadow-2xl relative z-10"
+                style={{ 
+                  background: getAvatarColor(callPartner.username),
+                  boxShadow: '0 8px 30px rgba(0,0,0,0.3)'
+                }}
+              >
+                {callPartner.username.slice(0, 2).toUpperCase()}
+              </div>
+            </div>
+
+            {/* Title / Partner name */}
+            <h2 style={{ 
+              fontSize: '20px', 
+              fontWeight: 700, 
+              color: '#fff', 
+              fontFamily: 'var(--font-display)',
+              marginBottom: '8px'
+            }}>
+              {callPartner.username}
+            </h2>
+
+            {/* Calling state description */}
+            <p style={{ 
+              fontSize: '13px', 
+              color: 'rgba(255,255,255,0.6)',
+              marginBottom: '40px',
+              fontWeight: 500
+            }}>
+              {callState === 'calling' && 'Calling... 📞'}
+              {callState === 'ringing' && 'Incoming Voice Call... 🔔'}
+              {callState === 'connected' && (
+                <span className="flex items-center gap-1.5 justify-center" style={{ color: 'var(--online)' }}>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  Connected — {Math.floor(callDuration / 60)}:{(callDuration % 60).toString().padStart(2, '0')}
+                </span>
+              )}
+            </p>
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-6 justify-center w-full">
+              {/* Incoming Call Buttons */}
+              {callState === 'ringing' && (
+                <>
+                  <button
+                    onClick={rejectIncomingCall}
+                    className="w-14 h-14 rounded-full bg-red-600 hover:bg-red-700 hover:scale-105 active:scale-95 transition-all text-white flex items-center justify-center cursor-pointer shadow-lg border-none"
+                    title="Decline Call"
+                  >
+                    <PhoneOff className="w-6 h-6" />
+                  </button>
+                  <button
+                    onClick={answerIncomingCall}
+                    className="w-14 h-14 rounded-full bg-emerald-600 hover:bg-emerald-700 hover:scale-105 active:scale-95 transition-all text-white flex items-center justify-center cursor-pointer shadow-lg border-none"
+                    title="Accept Call"
+                  >
+                    <Phone className="w-6 h-6" />
+                  </button>
+                </>
+              )}
+
+              {/* Outgoing Call / Active Connected Call Buttons */}
+              {(callState === 'calling' || callState === 'connected') && (
+                <>
+                  {callState === 'connected' && (
+                    <button
+                      onClick={toggleMute}
+                      className="w-12 h-12 rounded-full transition-all flex items-center justify-center cursor-pointer shadow-md"
+                      style={{
+                        background: isMuted ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)',
+                        color: '#fff',
+                        border: '1px solid rgba(255,255,255,0.1)'
+                      }}
+                      title={isMuted ? 'Unmute' : 'Mute'}
+                    >
+                      {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                    </button>
+                  )}
+
+                  <button
+                    onClick={callState === 'calling' ? rejectIncomingCall : endActiveCall}
+                    className="w-14 h-14 rounded-full bg-red-600 hover:bg-red-700 hover:scale-105 active:scale-95 transition-all text-white flex items-center justify-center cursor-pointer shadow-lg border-none"
+                    title="End Call"
+                  >
+                    <PhoneOff className="w-6 h-6" />
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}

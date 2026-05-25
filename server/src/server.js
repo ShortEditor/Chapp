@@ -7,6 +7,7 @@ import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
 import prisma from './db.js';
+import webpush from 'web-push';
 import {
   hashPassword,
   comparePassword,
@@ -19,6 +20,23 @@ import { enqueueMessage, dequeueMessages } from './queue.js';
 import { startCleanupWorker } from './cleanup.js';
 
 dotenv.config();
+
+// Configure Web Push VAPID keys (generate dynamically if not in .env)
+let publicVapidKey = process.env.VAPID_PUBLIC_KEY;
+let privateVapidKey = process.env.VAPID_PRIVATE_KEY;
+
+if (!publicVapidKey || !privateVapidKey) {
+  console.log('🔑 [Push] No VAPID keys in .env. Generating dynamic keys for this session...');
+  const keys = webpush.generateVAPIDKeys();
+  publicVapidKey = keys.publicKey;
+  privateVapidKey = keys.privateKey;
+}
+
+webpush.setVapidDetails(
+  'mailto:support@chapp.app',
+  publicVapidKey,
+  privateVapidKey
+);
 
 const app = express();
 const httpServer = createServer(app);
@@ -174,6 +192,27 @@ io.on('connection', async (socket) => {
       console.log(`💾 [Message] Receiver offline. Queueing message: ${username} ➔ userId ${receiverId}`);
       await enqueueMessage(receiverId, messagePayload);
 
+      // Trigger Web Push Notification
+      try {
+        const receiver = await prisma.user.findUnique({
+          where: { id: receiverId }
+        });
+        if (receiver && receiver.pushSubscription) {
+          const sub = JSON.parse(receiver.pushSubscription);
+          const pushPayload = JSON.stringify({
+            title: `New message from ${username}`,
+            body: text || (mediaType === 'image' ? '📷 Sent a photo' : mediaType === 'video' ? '🎥 Sent a video' : '📁 Sent a file'),
+            icon: '/favicon.ico',
+            badge: '/favicon.ico',
+            url: '/chat'
+          });
+          console.log(`🔔 [Push] Relaying Web Push notification to offline user: ${receiver.username}`);
+          await webpush.sendNotification(sub, pushPayload);
+        }
+      } catch (pushErr) {
+        console.error('⚠️ [Push] Web Push trigger failed:', pushErr.message);
+      }
+
       // Return "delivered" (single tick) because it is safely buffered in server Redis/Memory
       socket.emit('message-status', { id, status: 'delivered' });
     }
@@ -223,6 +262,61 @@ io.on('connection', async (socket) => {
     const receiverSocketId = onlineUsers.get(receiverId);
     if (receiverSocketId) {
       io.to(receiverSocketId).emit('typing-stop', { senderId: userId });
+    }
+  });
+
+  // EVENT: WebRTC Call Signaling - call-user
+  socket.on('call-user', (data) => {
+    const { to, offer } = data;
+    const receiverSocketId = onlineUsers.get(to);
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit('incoming-call', {
+        from: userId,
+        fromUsername: username,
+        offer
+      });
+    } else {
+      socket.emit('call-rejected', { to, reason: 'offline' });
+    }
+  });
+
+  // EVENT: WebRTC Call Signaling - accept-call
+  socket.on('accept-call', (data) => {
+    const { to, answer } = data;
+    const callerSocketId = onlineUsers.get(to);
+    if (callerSocketId) {
+      io.to(callerSocketId).emit('call-accepted', {
+        from: userId,
+        answer
+      });
+    }
+  });
+
+  // EVENT: WebRTC Call Signaling - reject-call / end-call / ice-candidate
+  socket.on('reject-call', (data) => {
+    const { to } = data;
+    const callerSocketId = onlineUsers.get(to);
+    if (callerSocketId) {
+      io.to(callerSocketId).emit('call-rejected', { from: userId, reason: 'rejected' });
+    }
+  });
+
+  socket.on('end-call', (data) => {
+    const { to } = data;
+    const peerSocketId = onlineUsers.get(to);
+    if (peerSocketId) {
+      io.to(peerSocketId).emit('call-ended', { from: userId });
+    }
+  });
+
+  socket.on('ice-candidate', (data) => {
+    const { to, candidate } = data;
+    const peerSocketId = onlineUsers.get(to);
+    if (peerSocketId) {
+      io.to(peerSocketId).emit('ice-candidate', {
+        from: userId,
+        candidate
+      });
     }
   });
 
@@ -499,6 +593,30 @@ app.post('/api/backup', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('❌ [Backup POST] Error:', err.message);
     res.status(500).json({ error: 'Server error saving backup' });
+  }
+});
+
+// Web Push Notifications API Endpoints
+app.get('/api/notifications/vapidPublicKey', (req, res) => {
+  res.json({ publicKey: publicVapidKey });
+});
+
+app.post('/api/notifications/subscribe', authenticateToken, async (req, res) => {
+  const { subscription } = req.body;
+  if (!subscription) {
+    return res.status(400).json({ error: 'Subscription payload is required' });
+  }
+  try {
+    await prisma.user.update({
+      where: { id: req.user.id },
+      data: {
+        pushSubscription: JSON.stringify(subscription)
+      }
+    });
+    res.json({ success: true, message: 'Subscribed to push notifications successfully' });
+  } catch (err) {
+    console.error('❌ [Push Subscribe] Error:', err.message);
+    res.status(500).json({ error: 'Server error saving push subscription' });
   }
 });
 
