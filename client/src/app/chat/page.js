@@ -86,6 +86,7 @@ export default function ChatPage() {
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const lastChatIdRef = useRef(null);
 
   // -------------------------------------------------------------
   // DEXIE REACTIVE QUERIES
@@ -164,8 +165,18 @@ export default function ChatPage() {
 
   // Scroll to bottom of message list on new messages
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, typingFriends]);
+    if (!activeFriend) return;
+
+    const isNewChat = lastChatIdRef.current !== activeFriend.id;
+    if (isNewChat) {
+      // Instant snap on chat load
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+      lastChatIdRef.current = activeFriend.id;
+    } else {
+      // Smooth scroll only for new incoming/outgoing messages in the same chat
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, typingFriends, activeFriend]);
 
   // Handle setting active chat inside context for unread counter resets
   useEffect(() => {
