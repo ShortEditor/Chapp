@@ -998,7 +998,7 @@ export default function ChatPage() {
               style={{ background: getAvatarColor(currentUser?.username) }}
             >
               {currentUser?.avatar?.startsWith('http')
-                ? <img src={optimizeAvatarUrl(currentUser.avatar)} alt="me" className="w-full h-full object-cover" />
+                ? <img src={optimizeAvatarUrl(currentUser.avatar)} alt="me" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
                 : currentUser?.username?.slice(0, 2)}
               <span
                 className="status-dot"
@@ -1090,7 +1090,7 @@ export default function ChatPage() {
                         style={{ background: getAvatarColor(friend?.username) }}
                       >
                         {friend?.avatar?.startsWith('http')
-                          ? <img src={optimizeAvatarUrl(friend.avatar)} alt={friend.username} className="w-full h-full object-cover" />
+                          ? <img src={optimizeAvatarUrl(friend.avatar)} alt={friend.username} className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
                           : friend?.username?.slice(0, 2)}
                       </div>
                       {isOnline && (
@@ -1183,7 +1183,7 @@ export default function ChatPage() {
                       <div className="relative shrink-0">
                         <div className="avatar w-10 h-10 text-xs" style={{ background: getAvatarColor(friend.username) }}>
                           {friend.avatar?.startsWith('http')
-                            ? <img src={optimizeAvatarUrl(friend.avatar)} alt={friend.username} className="w-full h-full object-cover" />
+                            ? <img src={optimizeAvatarUrl(friend.avatar)} alt={friend.username} className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
                             : friend.username.slice(0, 2)}
                         </div>
                         {isOnline && <span className="status-dot status-online" style={{ borderColor: 'var(--surface-2)' }} />}
@@ -1217,7 +1217,7 @@ export default function ChatPage() {
                       <div className="flex items-center gap-3 mb-3">
                         <div className="avatar w-10 h-10 text-xs shrink-0" style={{ background: getAvatarColor(u.username) }}>
                           {u.avatar?.startsWith('http')
-                            ? <img src={optimizeAvatarUrl(u.avatar)} alt={u.username} className="w-full h-full object-cover" />
+                            ? <img src={optimizeAvatarUrl(u.avatar)} alt={u.username} className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
                             : u.username.slice(0, 2)}
                         </div>
                         <div>
@@ -1319,7 +1319,7 @@ export default function ChatPage() {
                 <div className="relative shrink-0">
                   <div className="avatar w-10 h-10 text-sm" style={{ background: getAvatarColor(activeFriend.username) }}>
                     {activeFriend.avatar?.startsWith('http')
-                      ? <img src={optimizeAvatarUrl(activeFriend.avatar)} alt={activeFriend.username} className="w-full h-full object-cover" />
+                      ? <img src={optimizeAvatarUrl(activeFriend.avatar)} alt={activeFriend.username} className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
                       : activeFriend.username.slice(0, 2)}
                   </div>
                   {onlineFriends.get(activeFriend.id) === 'online' && (
@@ -1470,6 +1470,7 @@ export default function ChatPage() {
                                   alt="Attachment"
                                   style={{ maxHeight: '220px', width: '100%', objectFit: 'cover', borderRadius: '12px', cursor: 'pointer', display: 'block' }}
                                   onClick={() => setPreviewImage(msg.mediaUrl)}
+                                  onError={(e) => { e.target.style.display = 'none'; }}
                                 />
                                 <button
                                   onClick={() => downloadFile(msg.mediaUrl, msg.id + '.jpg')}
@@ -1672,7 +1673,7 @@ export default function ChatPage() {
                     title="Click circle to directly upload avatar"
                   >
                     {editAvatar?.startsWith('http') ? (
-                      <img src={optimizeAvatarUrl(editAvatar)} alt="preview" className="w-full h-full object-cover" />
+                      <img src={optimizeAvatarUrl(editAvatar)} alt="preview" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
                     ) : (
                       <span className="text-2xl font-bold text-white">{currentUser?.username?.slice(0, 2).toUpperCase()}</span>
                     )}
@@ -2007,7 +2008,7 @@ export default function ChatPage() {
                     }}
                   >
                     {partner.avatar?.startsWith('http') ? (
-                      <img src={optimizeAvatarUrl(partner.avatar)} alt={partner.username} className="w-full h-full object-cover" />
+                      <img src={optimizeAvatarUrl(partner.avatar)} alt={partner.username} className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
                     ) : (
                       partner.username?.slice(0, 2).toUpperCase()
                     )}
