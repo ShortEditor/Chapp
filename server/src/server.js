@@ -325,6 +325,12 @@ io.on('connection', async (socket) => {
   socket.on('disconnect', () => {
     console.log(`🔌 [Socket] User disconnected: ${username} (${userId})`);
     
+    // If the active socket for this user is a NEWER socket, ignore this stale disconnect
+    if (onlineUsers.get(userId) !== socket.id) {
+      console.log(`⚡ [Socket] Stale socket disconnected for ${username}, ignoring...`);
+      return;
+    }
+
     // Remove active socket reference
     onlineUsers.delete(userId);
 
