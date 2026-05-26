@@ -39,7 +39,8 @@ import {
   Volume2,
   Bluetooth,
   Headphones,
-  ChevronUp
+  ChevronUp,
+  User
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { encryptData, decryptData } from '@/lib/crypto';
@@ -1345,6 +1346,23 @@ export default function ChatPage() {
               )}
             </div>
           )}
+          {/* ── PROFILE TAB ── */}
+          {activeTab === 'profile' && (
+            <div className="p-4">
+              <h2 className="text-lg font-semibold" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>Your Profile</h2>
+              <div className="flex items-center gap-4 mt-4">
+                <div className="avatar w-12 h-12 text-sm" style={{ background: getAvatarColor(currentUser?.username) }}>
+                  {currentUser?.avatar?.startsWith('http')
+                    ? <img src={optimizeAvatarUrl(currentUser.avatar)} alt={currentUser?.username} className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
+                    : currentUser?.username?.slice(0, 2)}
+                </div>
+                <div>
+                  <p className="font-semibold" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>{renderUsername(currentUser?.username)}</p>
+                  <p className="text-xs text-muted">{currentUser?.bio || 'No bio set.'}</p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Bottom Navigation */}
@@ -1369,7 +1387,11 @@ export default function ChatPage() {
               </span>
             )}
           </button>
-        </div>
+                    <button onClick={() => setActiveTab('profile')} className={`bottom-nav-item ${activeTab === 'profile' ? 'active' : ''}`}>
+              <User className="w-5 h-5" />
+              Profile
+            </button>
+          </div>
       </div>
 
       {/* ═══════════════════════════════════════

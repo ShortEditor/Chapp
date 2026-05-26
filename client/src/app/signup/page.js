@@ -73,7 +73,7 @@ export default function SignupPage() {
             className="w-14 h-14 rounded-2xl flex items-center justify-center mb-3 shadow-md"
             style={{ background: 'linear-gradient(135deg, #1a73e8, #6c63ff)' }}
           >
-            <MessageSquare className="w-7 h-7 text-white" strokeWidth={2.5} />
+<img src="/logo.png" alt="Chapp logo" className="w-7 h-7" />
           </div>
           <h1 className="text-3xl font-bold tracking-tight text-[#202124] mb-0.5" style={{ fontFamily: 'var(--font-display)' }}>
             Chapp
