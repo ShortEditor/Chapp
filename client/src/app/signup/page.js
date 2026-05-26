@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useSocket } from '@/context/SocketContext';
-import { Eye, EyeOff, AlertCircle, Zap } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, MessageSquare } from 'lucide-react';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://chapp-oxa7.onrender.com';
 
@@ -21,6 +21,16 @@ export default function SignupPage() {
   useEffect(() => {
     const token = localStorage.getItem('chapp_token');
     if (token) router.push('/chat');
+
+    const preventDefaultContextMenu = (e) => {
+      if (e.target.tagName === 'IMG') {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('contextmenu', preventDefaultContextMenu);
+    return () => {
+      window.removeEventListener('contextmenu', preventDefaultContextMenu);
+    };
   }, [router]);
 
   const handleSignup = async (e) => {
@@ -58,18 +68,18 @@ export default function SignupPage() {
     >
       <div className="auth-card w-full max-w-[400px] p-8 slide-up">
         {/* Logo */}
-        <div className="flex flex-col items-center mb-8">
+        <div className="flex flex-col items-center mb-6">
           <div
-            className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4 shadow-lg"
+            className="w-14 h-14 rounded-2xl flex items-center justify-center mb-3 shadow-md"
             style={{ background: 'linear-gradient(135deg, #1a73e8, #6c63ff)' }}
           >
-            <Zap className="w-8 h-8 text-white" strokeWidth={2.5} />
+            <MessageSquare className="w-7 h-7 text-white" strokeWidth={2.5} />
           </div>
-          <h1 className="text-2xl text-[#202124]" style={{ fontFamily: 'var(--font-jakarta)' }}>
-            Create account
+          <h1 className="text-3xl font-bold tracking-tight text-[#202124] mb-0.5" style={{ fontFamily: 'var(--font-display)' }}>
+            Chapp
           </h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-            Your chats. Your control.
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+            Create an account to get started
           </p>
         </div>
 
@@ -82,7 +92,7 @@ export default function SignupPage() {
           </div>
         )}
 
-        <form onSubmit={handleSignup} className="space-y-4">
+        <form onSubmit={handleSignup} className="flex flex-col gap-4">
           <div>
             <label className="label-text">Username</label>
             <input

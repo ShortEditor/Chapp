@@ -60,6 +60,12 @@ body {
   overflow-x: hidden;
 }
 
+img {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 h1, h2, h3, h4, h5 {
   font-family: var(--font-display);
   font-weight: 700;

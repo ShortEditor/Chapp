@@ -46,12 +46,18 @@ import { encryptData, decryptData } from '@/lib/crypto';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://chapp-oxa7.onrender.com';
 
+const ensureSecureUrl = (url) => {
+  if (!url) return url;
+  return url.startsWith('http://') ? url.replace('http://', 'https://') : url;
+};
+
 const optimizeAvatarUrl = (url) => {
   if (!url) return url;
-  if (url.includes('res.cloudinary.com') && url.includes('/upload/v')) {
-    return url.replace('/upload/v', '/upload/w_150,h_150,c_fill,q_auto,f_auto/v');
+  const secureUrl = ensureSecureUrl(url);
+  if (secureUrl.includes('res.cloudinary.com') && secureUrl.includes('/upload/v')) {
+    return secureUrl.replace('/upload/v', '/upload/w_150,h_150,c_fill,q_auto,f_auto/v');
   }
-  return url;
+  return secureUrl;
 };
 
 const VERIFIED_USERS = ['shorteditor', 'trilok'];
@@ -239,6 +245,23 @@ export default function ChatPage() {
     setEditAvatar(user.avatar || '');
     setCustomStatus(user.status || 'online');
 
+    // Fetch latest profile from backend to ensure we have the most up-to-date data
+    fetch(`${BACKEND_URL}/api/users/profile`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+      .then(res => {
+        if (res.ok) return res.json();
+        throw new Error('Failed to fetch profile');
+      })
+      .then(data => {
+        setCurrentUser(data);
+        localStorage.setItem('chapp_user', JSON.stringify(data));
+        setEditBio(data.bio || '');
+        setEditAvatar(data.avatar || '');
+        setCustomStatus(data.status || 'online');
+      })
+      .catch(err => console.error('❌ Error syncing profile on startup:', err));
+
     // Load auto backup state from local storage
     const savedAuto = localStorage.getItem('chapp_auto_backup_enabled') === 'true';
     setAutoBackupEnabled(savedAuto);
@@ -262,6 +285,14 @@ export default function ChatPage() {
     window.addEventListener('pwa-installable', handlePwaInstallable);
     window.addEventListener('pwa-installed', handlePwaInstalled);
 
+    // 6. Disable context menu / long press on images
+    const preventDefaultContextMenu = (e) => {
+      if (e.target.tagName === 'IMG') {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('contextmenu', preventDefaultContextMenu);
+
     if (window.deferredPrompt) {
       setIsPwaInstallable(true);
     }
@@ -269,6 +300,7 @@ export default function ChatPage() {
     return () => {
       window.removeEventListener('pwa-installable', handlePwaInstallable);
       window.removeEventListener('pwa-installed', handlePwaInstalled);
+      window.removeEventListener('contextmenu', preventDefaultContextMenu);
     };
   }, [connectSocket, router]);
 
@@ -393,10 +425,29 @@ export default function ChatPage() {
       const registration = await navigator.serviceWorker.ready;
       
       // 3. Register Subscription
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: outputArray
-      });
+      let subscription;
+      try {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: outputArray
+        });
+      } catch (subErr) {
+        console.warn('⚠️ Push subscription failed, attempting to reset active subscription:', subErr);
+        try {
+          const activeSub = await registration.pushManager.getSubscription();
+          if (activeSub) {
+            await activeSub.unsubscribe();
+            console.log('✅ Unsubscribed existing push subscription.');
+          }
+          // Retry subscription
+          subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: outputArray
+          });
+        } catch (retryErr) {
+          throw new Error(`Failed to subscribe after reset: ${retryErr.message}`);
+        }
+      }
 
       // 4. Send subscription to server
       const token = localStorage.getItem('chapp_token');
@@ -411,6 +462,28 @@ export default function ChatPage() {
     } catch (err) {
       console.error('❌ Failed to register push notifications:', err);
     }
+  };
+
+  const saveAvatarToBackend = async (imageUrl, token) => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/users/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ avatar: imageUrl })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setCurrentUser(data);
+        localStorage.setItem('chapp_user', JSON.stringify(data));
+        return true;
+      }
+    } catch (err) {
+      console.error('❌ Failed to auto-save avatar to backend:', err);
+    }
+    return false;
   };
 
   const handleAvatarUpload = async (e) => {
@@ -495,7 +568,12 @@ export default function ChatPage() {
       const imageUrl = uploadData.secure_url;
 
       setEditAvatar(imageUrl);
-      setProfileStatusMessage({ text: 'Avatar uploaded successfully via Cloudinary! Make sure to click Save Changes below.', type: 'success' });
+      const saved = await saveAvatarToBackend(imageUrl, token);
+      if (saved) {
+        setProfileStatusMessage({ text: 'Avatar uploaded and saved successfully!', type: 'success' });
+      } else {
+        setProfileStatusMessage({ text: 'Avatar uploaded successfully! Click Save Changes to apply.', type: 'success' });
+      }
       setAvatarUploading(false);
       return;
     } catch (layer1Err) {
@@ -525,7 +603,12 @@ export default function ChatPage() {
       const imageUrl = data.secure_url;
 
       setEditAvatar(imageUrl);
-      setProfileStatusMessage({ text: 'Avatar uploaded successfully via Cloudinary! Make sure to click Save Changes below.', type: 'success' });
+      const saved = await saveAvatarToBackend(imageUrl, token);
+      if (saved) {
+        setProfileStatusMessage({ text: 'Avatar uploaded and saved successfully!', type: 'success' });
+      } else {
+        setProfileStatusMessage({ text: 'Avatar uploaded successfully! Click Save Changes to apply.', type: 'success' });
+      }
       setAvatarUploading(false);
       return;
     } catch (layer2Err) {
@@ -554,7 +637,12 @@ export default function ChatPage() {
       const imageUrl = data.url;
 
       setEditAvatar(imageUrl);
-      setProfileStatusMessage({ text: 'Uploaded successfully to Chapp Server! Click Save Changes below.', type: 'success' });
+      const saved = await saveAvatarToBackend(imageUrl, token);
+      if (saved) {
+        setProfileStatusMessage({ text: 'Avatar uploaded and saved successfully!', type: 'success' });
+      } else {
+        setProfileStatusMessage({ text: 'Avatar uploaded successfully! Click Save Changes to apply.', type: 'success' });
+      }
     } catch (layer3Err) {
       console.error('❌ All avatar upload layers failed:', layer3Err.message);
       setProfileStatusMessage({ text: `Avatar upload failed: ${layer3Err.message}`, type: 'error' });
@@ -953,7 +1041,8 @@ export default function ChatPage() {
   // Helper to download media file (converts to binary blob for security/PWA compatibility)
   const downloadFile = async (url, filename) => {
     try {
-      const res = await fetch(url);
+      const secureUrl = ensureSecureUrl(url);
+      const res = await fetch(secureUrl);
       const blob = await res.blob();
       const blobUrl = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1466,10 +1555,10 @@ export default function ChatPage() {
                             {msg.mediaType === 'image' && (
                               <div style={{ position: 'relative' }} className="group">
                                 <img
-                                  src={msg.mediaUrl}
+                                  src={ensureSecureUrl(msg.mediaUrl)}
                                   alt="Attachment"
                                   style={{ maxHeight: '220px', width: '100%', objectFit: 'cover', borderRadius: '12px', cursor: 'pointer', display: 'block' }}
-                                  onClick={() => setPreviewImage(msg.mediaUrl)}
+                                  onClick={() => setPreviewImage(ensureSecureUrl(msg.mediaUrl))}
                                   onError={(e) => { e.target.style.display = 'none'; }}
                                 />
                                 <button
@@ -1482,7 +1571,7 @@ export default function ChatPage() {
                               </div>
                             )}
                             {msg.mediaType === 'video' && (
-                              <video src={msg.mediaUrl} controls style={{ maxHeight: '240px', width: '100%', borderRadius: '12px', display: 'block' }} />
+                              <video src={ensureSecureUrl(msg.mediaUrl)} controls style={{ maxHeight: '240px', width: '100%', borderRadius: '12px', display: 'block' }} />
                             )}
                             {msg.mediaType !== 'image' && msg.mediaType !== 'video' && (
                               <div
@@ -1707,16 +1796,7 @@ export default function ChatPage() {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label className="label-text">Or Paste Photo URL</label>
-                  <input
-                    type="text"
-                    placeholder="Paste an image URL..."
-                    value={editAvatar}
-                    onChange={e => setEditAvatar(e.target.value)}
-                    className="modal-input"
-                  />
-                </div>
+
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <label className="label-text">Bio</label>
                   <textarea
