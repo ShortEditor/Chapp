@@ -45,7 +45,14 @@ import {
 import confetti from 'canvas-confetti';
 import { encryptData, decryptData } from '@/lib/crypto';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://chapp-oxa7.onrender.com';
+let BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'https://chapp-oxa7.onrender.com').replace(/^["']|["']$/g, '');
+if (typeof window !== 'undefined' && (BACKEND_URL.includes('localhost') || BACKEND_URL.includes('127.0.0.1'))) {
+  const hostname = window.location.hostname;
+  if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
+    BACKEND_URL = BACKEND_URL.replace('localhost', hostname).replace('127.0.0.1', hostname);
+  }
+}
+
 
 const ensureSecureUrl = (url) => {
   if (!url) return url;
@@ -61,7 +68,8 @@ const optimizeAvatarUrl = (url) => {
   return secureUrl;
 };
 
-const VERIFIED_USERS = ['shorteditor', 'trilok'];
+const VERIFIED_USERS = ['shorteditor'];
+const PINK_VERIFIED_USERS = ['trilok', 'nagaganesh'];
 
 const BlueTick = () => (
   <svg className="w-4 h-4 shrink-0 inline-block" viewBox="0 0 24 24" fill="none">
@@ -70,7 +78,22 @@ const BlueTick = () => (
   </svg>
 );
 
+const PinkTick = () => (
+  <svg className="w-4 h-4 shrink-0 inline-block" viewBox="0 0 24 24" fill="none">
+    <path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" stroke="#ff69b4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="#ff69b4" />
+    <path d="M9 12l2 2 4-4" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 const renderUsername = (username, textStyle = {}) => {
+  if (username && PINK_VERIFIED_USERS.includes(username.toLowerCase())) {
+    return (
+      <span className="inline-flex items-center gap-1" style={textStyle}>
+        <span>{username}</span>
+        <PinkTick />
+      </span>
+    );
+  }
   if (username && VERIFIED_USERS.includes(username.toLowerCase())) {
     return (
       <span className="inline-flex items-center gap-1" style={textStyle}>
@@ -2202,93 +2225,119 @@ export default function ChatPage() {
                         </button>
                         
                         {showAudioMenu && (
-                          <div 
-                            className="absolute bottom-16 left-1/2 -translate-x-1/2 w-[280px] rounded-3xl p-3 flex flex-col gap-1.5 z-50"
-                            style={{
-                              background: 'rgba(23, 23, 23, 0.95)',
-                              backdropFilter: 'blur(24px)',
-                              border: '1px solid rgba(255, 255, 255, 0.15)',
-                              boxShadow: '0 12px 40px rgba(0, 0, 0, 0.5)'
-                            }}
-                          >
-                            <div className="text-xs uppercase font-bold tracking-wider px-4 py-2" style={{ color: 'rgba(255, 255, 255, 0.5)' }}>
-                              Audio Route
-                            </div>
-                            
-                            {audioOutputs.length === 0 ? (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={async () => {
-                                    if (speakerMode) {
-                                      await toggleSpeakerMode();
-                                    }
-                                    setShowAudioMenu(false);
-                                  }}
-                                  className="w-full text-left px-4 py-3.5 rounded-2xl text-sm font-semibold flex items-center gap-3 transition-all text-white border-none cursor-pointer"
-                                  style={{
-                                    background: !speakerMode ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
-                                  }}
-                                >
-                                  <Phone className="w-5 h-5 shrink-0" />
-                                  <span className="flex-1 truncate">Earpiece / Headset</span>
-                                  {!speakerMode && <Check className="w-5 h-5 shrink-0 text-emerald-400" />}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={async () => {
-                                    if (!speakerMode) {
-                                      await toggleSpeakerMode();
-                                    }
-                                    setShowAudioMenu(false);
-                                  }}
-                                  className="w-full text-left px-4 py-3.5 rounded-2xl text-sm font-semibold flex items-center gap-3 transition-all text-white border-none cursor-pointer"
-                                  style={{
-                                    background: speakerMode ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
-                                  }}
-                                >
-                                  <Volume2 className="w-5 h-5 shrink-0" />
-                                  <span className="flex-1 truncate">Speakerphone</span>
-                                  {speakerMode && <Check className="w-5 h-5 shrink-0 text-emerald-400" />}
-                                </button>
-                              </>
-                            ) : (
-                              audioOutputs.map(dev => {
-                                const label = dev.label || 'Unknown Output';
-                                const isSelected = currentSinkId === dev.deviceId || (dev.deviceId === 'default' && !currentSinkId);
-                                
-                                let DeviceIcon = Volume2;
-                                if (label.toLowerCase().includes('bluetooth') || label.toLowerCase().includes('wireless') || label.toLowerCase().includes('buds') || label.toLowerCase().includes('pods')) {
-                                  DeviceIcon = Bluetooth;
-                                } else if (label.toLowerCase().includes('headphone') || label.toLowerCase().includes('headset') || label.toLowerCase().includes('audio jack')) {
-                                  DeviceIcon = Headphones;
-                                } else if (label.toLowerCase().includes('earpiece') || label.toLowerCase().includes('receiver') || label.toLowerCase().includes('handset')) {
-                                  DeviceIcon = Phone;
-                                } else if (label.toLowerCase().includes('speaker') || label.toLowerCase().includes('loudspeaker')) {
-                                  DeviceIcon = Volume2;
-                                }
-                                
-                                return (
+                          <>
+                            {/* Tap-to-close backdrop */}
+                            <div
+                              onClick={() => setShowAudioMenu(false)}
+                              style={{
+                                position: 'fixed',
+                                top: 0,
+                                left: 0,
+                                width: '100vw',
+                                height: '100vh',
+                                zIndex: 10002,
+                                background: 'rgba(0,0,0,0.3)',
+                              }}
+                            />
+                            <div 
+                              style={{
+                                position: 'fixed',
+                                bottom: '120px',
+                                left: '50%',
+                                transform: 'translateX(-50%)',
+                                width: '280px',
+                                maxWidth: 'calc(100vw - 40px)',
+                                borderRadius: '24px',
+                                padding: '12px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '6px',
+                                zIndex: 10003,
+                                background: 'rgba(23, 23, 23, 0.97)',
+                                backdropFilter: 'blur(24px)',
+                                border: '1px solid rgba(255, 255, 255, 0.15)',
+                                boxShadow: '0 12px 40px rgba(0, 0, 0, 0.5)',
+                              }}
+                            >
+                              <div className="text-xs uppercase font-bold tracking-wider px-4 py-2" style={{ color: 'rgba(255, 255, 255, 0.5)' }}>
+                                Audio Route
+                              </div>
+                              
+                              {audioOutputs.length === 0 ? (
+                                <>
                                   <button
-                                    key={dev.deviceId}
                                     type="button"
                                     onClick={async () => {
-                                      await setAudioOutputDevice(dev.deviceId);
+                                      if (speakerMode) {
+                                        await toggleSpeakerMode();
+                                      }
                                       setShowAudioMenu(false);
                                     }}
                                     className="w-full text-left px-4 py-3.5 rounded-2xl text-sm font-semibold flex items-center gap-3 transition-all text-white border-none cursor-pointer"
                                     style={{
-                                      background: isSelected ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                                      background: !speakerMode ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
                                     }}
                                   >
-                                    <DeviceIcon className="w-5 h-5 shrink-0" style={{ color: isSelected ? 'var(--primary)' : 'rgba(255, 255, 255, 0.6)' }} />
-                                    <span className="flex-1 truncate">{label}</span>
-                                    {isSelected && <Check className="w-5 h-5 shrink-0 text-emerald-400" />}
+                                    <Phone className="w-5 h-5 shrink-0" />
+                                    <span className="flex-1 truncate">Earpiece / Headset</span>
+                                    {!speakerMode && <Check className="w-5 h-5 shrink-0 text-emerald-400" />}
                                   </button>
-                                );
-                              })
-                            )}
-                          </div>
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      if (!speakerMode) {
+                                        await toggleSpeakerMode();
+                                      }
+                                      setShowAudioMenu(false);
+                                    }}
+                                    className="w-full text-left px-4 py-3.5 rounded-2xl text-sm font-semibold flex items-center gap-3 transition-all text-white border-none cursor-pointer"
+                                    style={{
+                                      background: speakerMode ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                                    }}
+                                  >
+                                    <Volume2 className="w-5 h-5 shrink-0" />
+                                    <span className="flex-1 truncate">Speakerphone</span>
+                                    {speakerMode && <Check className="w-5 h-5 shrink-0 text-emerald-400" />}
+                                  </button>
+                                </>
+                              ) : (
+                                audioOutputs.map(dev => {
+                                  const label = dev.label || 'Unknown Output';
+                                  const isSelected = currentSinkId === dev.deviceId || (dev.deviceId === 'default' && !currentSinkId);
+                                  
+                                  let DeviceIcon = Volume2;
+                                  if (label.toLowerCase().includes('bluetooth') || label.toLowerCase().includes('wireless') || label.toLowerCase().includes('buds') || label.toLowerCase().includes('pods')) {
+                                    DeviceIcon = Bluetooth;
+                                  } else if (label.toLowerCase().includes('headphone') || label.toLowerCase().includes('headset') || label.toLowerCase().includes('audio jack')) {
+                                    DeviceIcon = Headphones;
+                                  } else if (label.toLowerCase().includes('earpiece') || label.toLowerCase().includes('receiver') || label.toLowerCase().includes('handset')) {
+                                    DeviceIcon = Phone;
+                                  } else if (label.toLowerCase().includes('speaker') || label.toLowerCase().includes('loudspeaker')) {
+                                    DeviceIcon = Volume2;
+                                  }
+                                  
+                                  return (
+                                    <button
+                                      key={dev.deviceId}
+                                      type="button"
+                                      onClick={async () => {
+                                        await setAudioOutputDevice(dev.deviceId);
+                                        setShowAudioMenu(false);
+                                      }}
+                                      className="w-full text-left px-4 py-3.5 rounded-2xl text-sm font-semibold flex items-center gap-3 transition-all text-white border-none cursor-pointer"
+                                      style={{
+                                        background: isSelected ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                                      }}
+                                    >
+                                      <DeviceIcon className="w-5 h-5 shrink-0" style={{ color: isSelected ? 'var(--primary)' : 'rgba(255, 255, 255, 0.6)' }} />
+                                      <span className="flex-1 truncate">{label}</span>
+                                      {isSelected && <Check className="w-5 h-5 shrink-0 text-emerald-400" />}
+                                    </button>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </>
                         )}
                       </div>
                     </>

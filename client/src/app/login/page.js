@@ -7,7 +7,14 @@ import { useSocket } from '@/context/SocketContext';
 import { Eye, EyeOff, AlertCircle } from 'lucide-react';
 import db from '@/db/localDb';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://chapp-oxa7.onrender.com';
+let BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'https://chapp-oxa7.onrender.com').replace(/^["']|["']$/g, '');
+if (typeof window !== 'undefined' && (BACKEND_URL.includes('localhost') || BACKEND_URL.includes('127.0.0.1'))) {
+  const hostname = window.location.hostname;
+  if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
+    BACKEND_URL = BACKEND_URL.replace('localhost', hostname).replace('127.0.0.1', hostname);
+  }
+}
+
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
