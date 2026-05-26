@@ -46,32 +46,21 @@ import { encryptData, decryptData } from '@/lib/crypto';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://chapp-oxa7.onrender.com';
 
+const VERIFIED_USERS = ['shorteditor', 'trilok'];
+
+const BlueTick = () => (
+  <svg className="w-4 h-4 shrink-0 inline-block" viewBox="0 0 24 24" fill="none">
+    <path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" stroke="#1d9bf0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="#1d9bf0" />
+    <path d="M9 12l2 2 4-4" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 const renderUsername = (username, textStyle = {}) => {
-  if (username && username.toLowerCase() === 'shorteditor') {
+  if (username && VERIFIED_USERS.includes(username.toLowerCase())) {
     return (
       <span className="inline-flex items-center gap-1" style={textStyle}>
         <span>{username}</span>
-        <svg 
-          className="w-4 h-4 shrink-0 inline-block" 
-          viewBox="0 0 24 24" 
-          fill="none"
-        >
-          <path 
-            d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" 
-            stroke="#1d9bf0" 
-            strokeWidth="2" 
-            strokeLinecap="round" 
-            strokeLinejoin="round"
-            fill="#1d9bf0"
-          />
-          <path 
-            d="M9 12l2 2 4-4" 
-            stroke="#fff" 
-            strokeWidth="1.8" 
-            strokeLinecap="round" 
-            strokeLinejoin="round"
-          />
-        </svg>
+        <BlueTick />
       </span>
     );
   }
