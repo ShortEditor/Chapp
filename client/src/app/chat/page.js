@@ -46,6 +46,14 @@ import { encryptData, decryptData } from '@/lib/crypto';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://chapp-oxa7.onrender.com';
 
+const optimizeAvatarUrl = (url) => {
+  if (!url) return url;
+  if (url.includes('res.cloudinary.com') && url.includes('/upload/v')) {
+    return url.replace('/upload/v', '/upload/w_150,h_150,c_fill,q_auto,f_auto/v');
+  }
+  return url;
+};
+
 const VERIFIED_USERS = ['shorteditor', 'trilok'];
 
 const BlueTick = () => (
@@ -406,10 +414,46 @@ export default function ChatPage() {
   };
 
   const handleAvatarUpload = async (e) => {
-    const file = e.target.files?.[0];
+    let file = e.target.files?.[0];
     if (!file) return;
 
     setAvatarUploading(true);
+    setProfileStatusMessage({ text: 'Compressing avatar...', type: 'info' });
+
+    try {
+      file = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+          const img = new Image();
+          img.src = event.target.result;
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const maxSize = 250;
+            let { width, height } = img;
+            if (width > height && width > maxSize) {
+              height *= maxSize / width;
+              width = maxSize;
+            } else if (height > maxSize) {
+              width *= maxSize / height;
+              height = maxSize;
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            canvas.toBlob((blob) => {
+              resolve(blob ? new File([blob], file.name, { type: 'image/jpeg' }) : file);
+            }, 'image/jpeg', 0.85);
+          };
+          img.onerror = () => resolve(file);
+        };
+        reader.onerror = () => resolve(file);
+      });
+    } catch(err) {
+      console.warn("Compression failed, using original file", err);
+    }
+
     setProfileStatusMessage({ text: 'Uploading avatar...', type: 'info' });
 
     const token = localStorage.getItem('chapp_token');
@@ -954,7 +998,7 @@ export default function ChatPage() {
               style={{ background: getAvatarColor(currentUser?.username) }}
             >
               {currentUser?.avatar?.startsWith('http')
-                ? <img src={currentUser.avatar} alt="me" className="w-full h-full object-cover" />
+                ? <img src={optimizeAvatarUrl(currentUser.avatar)} alt="me" className="w-full h-full object-cover" />
                 : currentUser?.username?.slice(0, 2)}
               <span
                 className="status-dot"
@@ -1046,7 +1090,7 @@ export default function ChatPage() {
                         style={{ background: getAvatarColor(friend?.username) }}
                       >
                         {friend?.avatar?.startsWith('http')
-                          ? <img src={friend.avatar} alt={friend.username} className="w-full h-full object-cover" />
+                          ? <img src={optimizeAvatarUrl(friend.avatar)} alt={friend.username} className="w-full h-full object-cover" />
                           : friend?.username?.slice(0, 2)}
                       </div>
                       {isOnline && (
@@ -1139,7 +1183,7 @@ export default function ChatPage() {
                       <div className="relative shrink-0">
                         <div className="avatar w-10 h-10 text-xs" style={{ background: getAvatarColor(friend.username) }}>
                           {friend.avatar?.startsWith('http')
-                            ? <img src={friend.avatar} alt={friend.username} className="w-full h-full object-cover" />
+                            ? <img src={optimizeAvatarUrl(friend.avatar)} alt={friend.username} className="w-full h-full object-cover" />
                             : friend.username.slice(0, 2)}
                         </div>
                         {isOnline && <span className="status-dot status-online" style={{ borderColor: 'var(--surface-2)' }} />}
@@ -1173,7 +1217,7 @@ export default function ChatPage() {
                       <div className="flex items-center gap-3 mb-3">
                         <div className="avatar w-10 h-10 text-xs shrink-0" style={{ background: getAvatarColor(u.username) }}>
                           {u.avatar?.startsWith('http')
-                            ? <img src={u.avatar} alt={u.username} className="w-full h-full object-cover" />
+                            ? <img src={optimizeAvatarUrl(u.avatar)} alt={u.username} className="w-full h-full object-cover" />
                             : u.username.slice(0, 2)}
                         </div>
                         <div>
@@ -1275,7 +1319,7 @@ export default function ChatPage() {
                 <div className="relative shrink-0">
                   <div className="avatar w-10 h-10 text-sm" style={{ background: getAvatarColor(activeFriend.username) }}>
                     {activeFriend.avatar?.startsWith('http')
-                      ? <img src={activeFriend.avatar} alt={activeFriend.username} className="w-full h-full object-cover" />
+                      ? <img src={optimizeAvatarUrl(activeFriend.avatar)} alt={activeFriend.username} className="w-full h-full object-cover" />
                       : activeFriend.username.slice(0, 2)}
                   </div>
                   {onlineFriends.get(activeFriend.id) === 'online' && (
@@ -1628,7 +1672,7 @@ export default function ChatPage() {
                     title="Click circle to directly upload avatar"
                   >
                     {editAvatar?.startsWith('http') ? (
-                      <img src={editAvatar} alt="preview" className="w-full h-full object-cover" />
+                      <img src={optimizeAvatarUrl(editAvatar)} alt="preview" className="w-full h-full object-cover" />
                     ) : (
                       <span className="text-2xl font-bold text-white">{currentUser?.username?.slice(0, 2).toUpperCase()}</span>
                     )}
@@ -1963,7 +2007,7 @@ export default function ChatPage() {
                     }}
                   >
                     {partner.avatar?.startsWith('http') ? (
-                      <img src={partner.avatar} alt={partner.username} className="w-full h-full object-cover" />
+                      <img src={optimizeAvatarUrl(partner.avatar)} alt={partner.username} className="w-full h-full object-cover" />
                     ) : (
                       partner.username?.slice(0, 2).toUpperCase()
                     )}
