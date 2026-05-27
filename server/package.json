@@ -4,6 +4,7 @@
   "description": "Privacy-focused realtime messaging backend for Chapp",
   "main": "src/server.js",
   "scripts": {
+    "postinstall": "prisma generate && prisma db push --skip-generate",
     "build": "prisma generate && prisma db push --skip-generate",
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
