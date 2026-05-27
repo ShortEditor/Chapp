@@ -482,7 +482,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const token = generateToken(user);
-    res.json({ token, user: { id: user.id, username: user.username, avatar: user.avatar, bio: user.bio } });
+    res.json({ token, user: { id: user.id, username: user.username, avatar: user.avatar, bio: user.bio, email: user.email } });
   } catch (err) {
     console.error('❌ [Login] Error:', err.message);
     res.status(500).json({ error: 'Server error during login' });
@@ -548,7 +548,7 @@ app.post('/api/auth/google', async (req, res) => {
     }
 
     const sessionToken = generateToken(user);
-    res.json({ token: sessionToken, user: { id: user.id, username: user.username, avatar: user.avatar, bio: user.bio } });
+    res.json({ token: sessionToken, user: { id: user.id, username: user.username, avatar: user.avatar, bio: user.bio, email: user.email } });
   } catch (err) {
     console.error('❌ [Google Login] Error:', err.message);
     res.status(500).json({ error: 'Server error during Google Authentication' });
@@ -689,7 +689,7 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
     });
     
     if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json({ id: user.id, username: user.username, avatar: user.avatar, bio: user.bio, status: user.status, createdAt: user.createdAt });
+    res.json({ id: user.id, username: user.username, avatar: user.avatar, bio: user.bio, status: user.status, createdAt: user.createdAt, email: user.email });
   } catch (err) {
     res.status(500).json({ error: 'Server error fetching profile' });
   }
@@ -697,19 +697,47 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
 
 app.put('/api/users/profile', authenticateToken, async (req, res) => {
   try {
-    const { bio, avatar, status } = req.body;
+    const { bio, avatar, status, email } = req.body;
+    
+    let emailUpdate = {};
+    if (email !== undefined) {
+      if (email === null || email.trim() === '') {
+        emailUpdate = { email: null };
+      } else {
+        const cleanEmail = email.trim().toLowerCase();
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(cleanEmail)) {
+          return res.status(400).json({ error: 'Invalid email address format' });
+        }
+        
+        // Verify uniqueness
+        const existingEmail = await prisma.user.findFirst({
+          where: {
+            email: cleanEmail,
+            NOT: { id: req.user.id }
+          }
+        });
+        if (existingEmail) {
+          return res.status(400).json({ error: 'Email address is already in use' });
+        }
+        
+        emailUpdate = { email: cleanEmail };
+      }
+    }
     
     const updated = await prisma.user.update({
       where: { id: req.user.id },
       data: {
         ...(bio !== undefined && { bio }),
         ...(avatar !== undefined && { avatar }),
-        ...(status !== undefined && { status })
+        ...(status !== undefined && { status }),
+        ...emailUpdate
       }
     });
 
-    res.json({ id: updated.id, username: updated.username, avatar: updated.avatar, bio: updated.bio, status: updated.status, createdAt: updated.createdAt });
+    res.json({ id: updated.id, username: updated.username, avatar: updated.avatar, bio: updated.bio, status: updated.status, createdAt: updated.createdAt, email: updated.email });
   } catch (err) {
+    console.error('❌ [Profile Update] Error:', err.message);
     res.status(500).json({ error: 'Server error updating profile' });
   }
 });

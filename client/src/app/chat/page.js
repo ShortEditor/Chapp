@@ -41,7 +41,9 @@ import {
   Headphones,
   ChevronUp,
   User,
-  Trash2
+  Trash2,
+  Mail,
+  AlertCircle
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { encryptData, decryptData } from '@/lib/crypto';
@@ -243,6 +245,13 @@ export default function ChatPage() {
   const [lastBackupTime, setLastBackupTime] = useState(null);
   const [autoBackupEnabled, setAutoBackupEnabled] = useState(false);
 
+  // Recovery email prompt states for existing users
+  const [showEmailPrompt, setShowEmailPrompt] = useState(false);
+  const [promptEmail, setPromptEmail] = useState('');
+  const [emailPromptError, setEmailPromptError] = useState('');
+  const [emailPromptSuccess, setEmailPromptSuccess] = useState(false);
+  const [emailPromptLoading, setEmailPromptLoading] = useState(false);
+
   // Media upload states
   const [uploading, setUploading] = useState(false);
   const [pendingMedia, setPendingMedia] = useState(null); // { url, type, name }
@@ -305,6 +314,11 @@ export default function ChatPage() {
         setEditBio(data.bio || '');
         setEditAvatar(data.avatar || '');
         setCustomStatus(data.status || 'online');
+        
+        // Ask recovery email for already existing accounts that don't have email registered
+        if (!data.email) {
+          setShowEmailPrompt(true);
+        }
       })
       .catch(err => console.error('❌ Error syncing profile on startup:', err));
 
@@ -1094,6 +1108,51 @@ export default function ChatPage() {
     }
   };
 
+  const handleSavePromptEmail = async (e) => {
+    e.preventDefault();
+    if (!promptEmail) return;
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(promptEmail.trim())) {
+      setEmailPromptError('Please enter a valid email address.');
+      return;
+    }
+
+    setEmailPromptError('');
+    setEmailPromptLoading(true);
+
+    try {
+      const token = localStorage.getItem('chapp_token');
+      const res = await fetch(`${BACKEND_URL}/api/users/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ email: promptEmail.trim() })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save email. Please try again.');
+
+      // Update current user locally
+      setCurrentUser(data);
+      localStorage.setItem('chapp_user', JSON.stringify(data));
+      
+      setEmailPromptSuccess(true);
+      confetti();
+
+      // Close modal after 2 seconds
+      setTimeout(() => {
+        setShowEmailPrompt(false);
+      }, 2000);
+    } catch (err) {
+      setEmailPromptError(err.message);
+    } finally {
+      setEmailPromptLoading(false);
+    }
+  };
+
   // -------------------------------------------------------------
   // MEDIA UPLOAD & ATTACHMENTS
   // -------------------------------------------------------------
@@ -1698,33 +1757,6 @@ export default function ChatPage() {
                   )}
                 </div>
               </div>
-
-              {/* Security & Sync Info Card */}
-              <div className="px-4 py-2">
-                <div className="p-4 rounded-2xl shadow-sm space-y-3" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-light)' }}>
-                  <span className="text-[10px] uppercase font-bold tracking-wider block" style={{ color: 'var(--text-muted)' }}>Security & Backup</span>
-                  
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <Database className="w-4 h-4" style={{ color: 'var(--text-subtle)' }} />
-                      <div className="min-w-0">
-                        <p className="font-semibold" style={{ color: 'var(--text)' }}>Zero-Knowledge Sync</p>
-                        <p className="text-[10px]" style={{ color: 'var(--text-subtle)' }}>
-                          {lastBackupTime ? `Last synced: ${new Date(lastBackupTime).toLocaleDateString()} ${new Date(lastBackupTime).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}` : 'No backups saved'}
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => { setSettingsTab('backup'); setShowSettings(true); }}
-                      className="px-2.5 py-1 rounded-lg text-[10px] font-bold text-white transition-opacity border-none cursor-pointer"
-                      style={{ background: 'var(--primary)' }}
-                    >
-                      Manage
-                    </button>
-                  </div>
-                </div>
-              </div>
-
               {/* Log Out */}
               <div className="px-4 py-3">
                 <button
@@ -2838,6 +2870,81 @@ export default function ChatPage() {
                 </>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════
+          RECOVERY EMAIL PROMPT MODAL FOR EXISTING ACCOUNTS
+          ═══════════════════════════════════════ */}
+      {showEmailPrompt && (
+        <div className="modal-overlay animate-fade-in" style={{ zIndex: 110 }}>
+          <div className="modal-card slide-up w-full max-w-[400px] p-8" style={{ background: 'var(--surface)', border: '1px solid var(--border-light)' }}>
+            <div className="flex flex-col items-center mb-6">
+              <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3" style={{ background: 'var(--primary-light)' }}>
+                <Mail className="w-6 h-6" style={{ color: 'var(--primary)' }} />
+              </div>
+              <h3 className="text-lg font-bold text-center mb-1" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>
+                Secure Your Account
+              </h3>
+              <p className="text-xs text-center px-2" style={{ color: 'var(--text-muted)' }}>
+                Set a recovery email address so you can reset your password if you ever get locked out.
+              </p>
+            </div>
+
+            {emailPromptError && (
+              <div className="mb-4 flex items-center gap-2.5 px-4 py-3 rounded-xl text-xs slide-up"
+                style={{ background: '#fce8e6', color: '#c5221f', border: '1px solid #f28b82' }}>
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{emailPromptError}</span>
+              </div>
+            )}
+
+            {emailPromptSuccess && (
+              <div className="mb-4 flex items-center gap-2.5 px-4 py-3 rounded-xl text-xs slide-up"
+                style={{ background: '#e6f4ea', color: '#137333', border: '1px solid #a8dab5' }}>
+                <Check className="w-4 h-4 shrink-0" />
+                <span>Recovery email saved successfully!</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSavePromptEmail} className="flex flex-col gap-4">
+              <div>
+                <label className="label-text">Recovery Email</label>
+                <input
+                  type="email"
+                  placeholder="Enter recovery email (e.g. gmail)"
+                  value={promptEmail}
+                  onChange={e => setPromptEmail(e.target.value)}
+                  className="field-input"
+                  required
+                  disabled={emailPromptLoading || emailPromptSuccess}
+                />
+              </div>
+
+              <div className="flex gap-3 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowEmailPrompt(false)}
+                  className="btn-ghost flex-1 py-2 text-xs font-semibold"
+                  disabled={emailPromptLoading || emailPromptSuccess}
+                >
+                  Remind Me Later
+                </button>
+                <button
+                  type="submit"
+                  className="btn-blue flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-2"
+                  disabled={emailPromptLoading || emailPromptSuccess}
+                >
+                  {emailPromptLoading ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                      Saving...
+                    </>
+                  ) : 'Save Email'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
