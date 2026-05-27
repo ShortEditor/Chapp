@@ -1251,6 +1251,10 @@ export default function ChatPage() {
            lastMsg.toLowerCase().includes(chatSearchQuery.toLowerCase());
   });
 
+  // Derived suggestions
+  const mutualSuggestions = suggestions.filter(s => s && s.mutualFriends && s.mutualFriends.length > 0);
+  const otherSuggestions = suggestions.filter(s => s && (!s.mutualFriends || s.mutualFriends.length === 0));
+
   return (
     <div className="flex h-[100dvh] overflow-hidden" style={{ background: 'var(--bg)' }}>
 
@@ -1439,8 +1443,8 @@ export default function ChatPage() {
 
           {/* ── FRIENDS TAB ── */}
           {activeTab === 'friends' && (
-            <div className="p-3 space-y-3">
-              <form onSubmit={handleAddFriend} className="flex gap-2">
+            <div className="p-3 space-y-4">
+              <form onSubmit={handleAddFriend} className="flex gap-2 relative" style={{ position: 'relative' }}>
                 <div className="relative flex-1">
                   <input
                     type="text"
@@ -1455,95 +1459,6 @@ export default function ChatPage() {
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" style={{ color: 'var(--text-subtle)' }} />
                     </div>
                   )}
-                  
-                  {/* Suggestions Dropdown */}
-                  {searchSuggestions.length > 0 && (
-                    <>
-                      {/* Click-away backdrop */}
-                      <div className="fixed inset-0 z-40" onClick={() => setSearchSuggestions([])} />
-                      
-                      <div className="absolute left-0 right-0 mt-1.5 rounded-2xl shadow-xl border overflow-hidden z-50 animate-fade-in"
-                        style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
-                        <div className="max-h-60 overflow-y-auto divide-y" style={{ divideColor: 'var(--border-light)' }}>
-                          {searchSuggestions.map(user => {
-                            const isAdding = sendingRequestIds.has(user.id);
-                            return (
-                              <div key={user.id} className="flex items-center justify-between p-2.5 hover:bg-slate-50/10 transition-colors">
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                  <div className="avatar w-8 h-8 text-xs relative font-bold" style={{ background: getAvatarColor(user.username) }}>
-                                    {user.username.slice(0, 2)}
-                                    {user.avatar?.startsWith('http') && (
-                                      <img src={optimizeAvatarUrl(user.avatar)} alt={user.username} className="w-full h-full object-cover" style={{ position: 'absolute', top: 0, left: 0 }} onError={(e) => { e.target.style.display = 'none'; }} />
-                                    )}
-                                  </div>
-                                  <div className="min-w-0">
-                                    <p className="text-xs font-semibold truncate flex items-center gap-1" style={{ color: 'var(--text)' }}>
-                                      {renderUsername(user.username)}
-                                    </p>
-                                    <p className="text-[9px]" style={{ color: user.status === 'online' ? 'var(--online)' : 'var(--text-subtle)' }}>
-                                      {user.status || 'offline'}
-                                    </p>
-                                  </div>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={async () => {
-                                    // Add to sending set
-                                    setSendingRequestIds(prev => {
-                                      const next = new Set(prev);
-                                      next.add(user.id);
-                                      return next;
-                                    });
-                                    
-                                    const token = localStorage.getItem('chapp_token');
-                                    try {
-                                      const response = await fetch(`${BACKEND_URL}/api/friends/request`, {
-                                        method: 'POST',
-                                        headers: {
-                                          'Content-Type': 'application/json',
-                                          'Authorization': `Bearer ${token}`
-                                        },
-                                        body: JSON.stringify({ username: user.username })
-                                      });
-                                      const data = await response.json();
-                                      if (!response.ok) throw new Error(data.error || 'Failed to send request');
-                                      
-                                      setFriendRequestMessage({ text: data.message || 'Request sent!', type: 'success' });
-                                      confetti({
-                                        particleCount: 40,
-                                        spread: 20,
-                                        origin: { y: 0.8 }
-                                      });
-                                      
-                                      // Remove from suggestions list
-                                      setSearchSuggestions(prev => prev.filter(item => item.id !== user.id));
-                                      setNewFriendUsername('');
-                                      refreshFriendsAndRequests(token);
-                                    } catch (err) {
-                                      setFriendRequestMessage({ text: err.message, type: 'error' });
-                                    } finally {
-                                      setSendingRequestIds(prev => {
-                                        const next = new Set(prev);
-                                        next.delete(user.id);
-                                        return next;
-                                      });
-                                    }
-                                  }}
-                                  disabled={isAdding}
-                                  className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-white transition-opacity shrink-0 hover:opacity-90 active:scale-95 border-none cursor-pointer flex items-center justify-center min-w-[50px]"
-                                  style={{ background: 'var(--primary)', height: '26px' }}
-                                >
-                                  {isAdding ? (
-                                    <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                                  ) : 'Add'}
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </>
-                  )}
                 </div>
                 <button
                   type="submit"
@@ -1553,11 +1468,100 @@ export default function ChatPage() {
                   <UserPlus className="w-3.5 h-3.5" />
                   <span>Add Friend</span>
                 </button>
+
+                {/* Suggestions Dropdown (moved here as direct child of form to span full width) */}
+                {searchSuggestions.length > 0 && (
+                  <>
+                    {/* Click-away backdrop */}
+                    <div className="fixed inset-0 z-40" onClick={() => setSearchSuggestions([])} />
+                    
+                    <div className="absolute left-0 right-0 top-full mt-2 rounded-2xl shadow-xl border overflow-hidden z-50 animate-zoom-in origin-top"
+                      style={{ background: 'var(--surface)', borderColor: 'var(--border)', transformOrigin: 'top' }}>
+                      <div className="max-h-60 overflow-y-auto divide-y" style={{ divideColor: 'var(--border-light)' }}>
+                        {searchSuggestions.map(user => {
+                          const isAdding = sendingRequestIds.has(user.id);
+                          return (
+                            <div key={user.id} className="flex items-center justify-between p-3.5 hover:bg-slate-50/10 transition-colors">
+                              <div className="flex items-center gap-3.5 min-w-0">
+                                <div className="avatar w-10 h-10 text-sm relative font-bold" style={{ background: getAvatarColor(user.username) }}>
+                                  {user.username.slice(0, 2)}
+                                  {user.avatar?.startsWith('http') && (
+                                    <img src={optimizeAvatarUrl(user.avatar)} alt={user.username} className="w-full h-full object-cover" style={{ position: 'absolute', top: 0, left: 0 }} onError={(e) => { e.target.style.display = 'none'; }} />
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-semibold truncate flex items-center gap-1" style={{ color: 'var(--text)' }}>
+                                    {renderUsername(user.username)}
+                                  </p>
+                                  <p className="text-[9px]" style={{ color: user.status === 'online' ? 'var(--online)' : 'var(--text-subtle)' }}>
+                                    {user.status || 'offline'}
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  // Add to sending set
+                                  setSendingRequestIds(prev => {
+                                    const next = new Set(prev);
+                                    next.add(user.id);
+                                    return next;
+                                  });
+                                  
+                                  const token = localStorage.getItem('chapp_token');
+                                  try {
+                                    const response = await fetch(`${BACKEND_URL}/api/friends/request`, {
+                                      method: 'POST',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': `Bearer ${token}`
+                                      },
+                                      body: JSON.stringify({ username: user.username })
+                                    });
+                                    const data = await response.json();
+                                    if (!response.ok) throw new Error(data.error || 'Failed to send request');
+                                    
+                                    setFriendRequestMessage({ text: data.message || 'Request sent!', type: 'success' });
+                                    confetti({
+                                      particleCount: 40,
+                                      spread: 20,
+                                      origin: { y: 0.8 }
+                                    });
+                                    
+                                    // Remove from suggestions list
+                                    setSearchSuggestions(prev => prev.filter(item => item.id !== user.id));
+                                    setNewFriendUsername('');
+                                    refreshFriendsAndRequests(token);
+                                  } catch (err) {
+                                    setFriendRequestMessage({ text: err.message, type: 'error' });
+                                  } finally {
+                                    setSendingRequestIds(prev => {
+                                      const next = new Set(prev);
+                                      next.delete(user.id);
+                                      return next;
+                                    });
+                                  }
+                                }}
+                                disabled={isAdding}
+                                className="px-3.5 py-1.5 rounded-lg text-[10px] font-bold text-white transition-opacity shrink-0 hover:opacity-90 active:scale-95 border-none cursor-pointer flex items-center justify-center min-w-[60px]"
+                                style={{ background: 'var(--primary)', height: '28px' }}
+                              >
+                                {isAdding ? (
+                                  <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                ) : 'Add'}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                )}
               </form>
 
               {friendRequestMessage.text && (
                 <div
-                  className="px-3 py-2 rounded-xl text-xs"
+                  className="px-3 py-2 rounded-xl text-xs animation-fade-in"
                   style={{
                     background: friendRequestMessage.type === 'success' ? '#e6f4ea' : '#fce8e6',
                     color: friendRequestMessage.type === 'success' ? '#137333' : '#c5221f',
@@ -1568,9 +1572,9 @@ export default function ChatPage() {
                 </div>
               )}
 
-              {/* Friend Suggestions */}
-              {suggestions.length > 0 && (
-                <div className="space-y-2 mt-4 pt-1 border-t" style={{ borderColor: 'var(--border-light)' }}>
+              {/* Friend Suggestions (Discover People without mutual friends) */}
+              {otherSuggestions.length > 0 && (
+                <div className="space-y-2 mt-4 pt-1 border-t animate-fade-in" style={{ borderColor: 'var(--border-light)' }}>
                   <div className="flex items-center justify-between px-1">
                     <h3 className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
                       People You May Know
@@ -1578,7 +1582,7 @@ export default function ChatPage() {
                     {fetchingSuggestions && <RefreshCw className="w-3 h-3 animate-spin" style={{ color: 'var(--text-subtle)' }} />}
                   </div>
                   <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                    {suggestions.map(s => (
+                    {otherSuggestions.map(s => (
                       <div
                         key={s.id}
                         className="flex items-center justify-between p-2.5 rounded-2xl border"
@@ -1596,19 +1600,19 @@ export default function ChatPage() {
                               {renderUsername(s.username)}
                             </p>
                             <p className="text-[10px] truncate" style={{ color: 'var(--text-subtle)' }}>
-                              {s.mutualFriends && s.mutualFriends.length > 0
-                                ? `${s.mutualFriends.length} mutual friend${s.mutualFriends.length > 1 ? 's' : ''}`
-                                : 'New to Chapp'}
+                              New to Chapp
                             </p>
                           </div>
                         </div>
                         <button
                           onClick={() => handleAddSuggestedFriend(s.username)}
                           disabled={sendingRequestIds.has(s.id)}
-                          className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-white transition-opacity shrink-0 hover:opacity-90 active:scale-95 border-none"
-                          style={{ background: 'var(--primary)' }}
+                          className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-white transition-opacity shrink-0 hover:opacity-90 active:scale-95 border-none cursor-pointer flex items-center justify-center min-w-[50px]"
+                          style={{ background: 'var(--primary)', height: '26px' }}
                         >
-                          {sendingRequestIds.has(s.id) ? 'Adding...' : 'Add'}
+                          {sendingRequestIds.has(s.id) ? (
+                            <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                          ) : 'Add'}
                         </button>
                       </div>
                     ))}
@@ -1639,7 +1643,7 @@ export default function ChatPage() {
                         db.chats.put({ friendId: friend.id, lastMessageText: '', lastMessageTime: Date.now(), unreadCount: 0 }).catch(() => {});
                         setActiveTab('chats');
                       }}
-                      className="conv-item"
+                      className="conv-item animate-fade-in"
                       style={{ borderRadius: '12px', background: 'var(--surface-2)', border: '1px solid var(--border-light)' }}
                     >
                       <div className="relative shrink-0">
@@ -1660,6 +1664,53 @@ export default function ChatPage() {
                     </div>
                   );
                 })
+              )}
+
+              {/* Mutual Suggestions Section (displayed below all friends) */}
+              {mutualSuggestions.length > 0 && (
+                <div className="space-y-2 mt-6 pt-4 border-t animate-fade-in" style={{ borderColor: 'var(--border-light)' }}>
+                  <div className="flex items-center justify-between px-1 mb-1">
+                    <h3 className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                      Suggested Connections (Mutual Friends)
+                    </h3>
+                  </div>
+                  <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                    {mutualSuggestions.map(s => (
+                      <div
+                        key={s.id}
+                        className="flex items-center justify-between p-3 rounded-2xl border transition-all hover:shadow-sm"
+                        style={{ background: 'var(--surface-2)', borderColor: 'var(--border-light)' }}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="avatar w-10 h-10 text-xs relative shrink-0" style={{ background: getAvatarColor(s.username) }}>
+                            {s.username.slice(0, 2)}
+                            {s.avatar?.startsWith('http') && (
+                              <img src={optimizeAvatarUrl(s.avatar)} alt={s.username} className="w-full h-full object-cover" style={{ position: 'absolute', top: 0, left: 0 }} onError={(e) => { e.target.style.display = 'none'; }} />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold truncate flex items-center gap-1" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>
+                              {renderUsername(s.username)}
+                            </p>
+                            <p className="text-[10px] truncate font-medium" style={{ color: 'var(--primary)' }}>
+                              {s.mutualFriends.length} mutual friend{s.mutualFriends.length > 1 ? 's' : ''}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleAddSuggestedFriend(s.username)}
+                          disabled={sendingRequestIds.has(s.id)}
+                          className="px-3.5 py-1.5 rounded-lg text-[10px] font-bold text-white transition-opacity shrink-0 hover:opacity-90 active:scale-95 border-none cursor-pointer flex items-center justify-center min-w-[60px]"
+                          style={{ background: 'var(--primary)', height: '28px' }}
+                        >
+                          {sendingRequestIds.has(s.id) ? (
+                            <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                          ) : 'Add'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
           )}
@@ -1723,7 +1774,7 @@ export default function ChatPage() {
           {/* ── PROFILE TAB ── */}
           {/* ── PROFILE TAB ── */}
           {activeTab === 'profile' && (
-            <div className="pb-6 space-y-4" style={{ background: 'var(--surface)' }}>
+            <div className="pb-8 space-y-6" style={{ background: 'var(--surface)' }}>
               {/* Premium Gradient Banner */}
               <div 
                 className="relative h-28 shrink-0 rounded-b-2xl shadow-sm overflow-hidden" 
@@ -1745,16 +1796,16 @@ export default function ChatPage() {
               </div>
 
               {/* Profile Card & Avatar */}
-              <div className="text-center px-4 pb-4">
+              <div className="text-center px-4 pb-2">
                 <label
-                  className="w-20 h-20 rounded-full border-4 flex items-center justify-center overflow-hidden shrink-0 relative group cursor-pointer hover:opacity-95 active:scale-95 transition-all mx-auto -mt-10 shadow-md"
+                  className="w-24 h-24 rounded-full border-4 flex items-center justify-center overflow-hidden shrink-0 relative group cursor-pointer hover:opacity-95 active:scale-95 transition-all mx-auto -mt-12 shadow-md"
                   style={{
                     background: getAvatarColor(currentUser?.username),
                     borderColor: 'var(--surface)',
                   }}
                   title="Click to change profile picture"
                 >
-                  <span className="text-xl font-bold text-white uppercase">{currentUser?.username?.slice(0, 2)}</span>
+                  <span className="text-2xl font-bold text-white uppercase">{currentUser?.username?.slice(0, 2)}</span>
                   {currentUser?.avatar?.startsWith('http') && (
                     <img src={optimizeAvatarUrl(currentUser.avatar)} alt="avatar" className="w-full h-full object-cover" style={{ position: 'absolute', top: 0, left: 0 }} onError={(e) => { e.target.style.display = 'none'; }} />
                   )}
@@ -1778,25 +1829,30 @@ export default function ChatPage() {
                   />
                 </label>
 
-                <h2 className="text-base font-bold mt-2 flex items-center justify-center gap-1.5" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>
+                <h2 className="text-lg font-bold mt-3 flex items-center justify-center gap-1.5" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>
                   {renderUsername(currentUser?.username)}
                 </h2>
-                <p className="text-[10px] uppercase font-bold tracking-wider" style={{ color: 'var(--text-subtle)' }}>
-                  Active Status: Online
-                </p>
+                
+                {/* Active Status Badge */}
+                <div className="flex items-center justify-center gap-1.5 mt-1.5">
+                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                  <span className="text-[10px] uppercase font-bold tracking-wider" style={{ color: 'var(--online)' }}>
+                    Active Status: Online
+                  </span>
+                </div>
               </div>
 
               {/* Statistics Grid */}
-              <div className="grid grid-cols-3 gap-3 px-4 py-2">
-                <div className="p-3 rounded-2xl flex flex-col items-center justify-center text-center shadow-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-light)' }}>
-                  <span className="text-sm font-bold" style={{ color: 'var(--text)' }}>{dbFriends.length}</span>
+              <div className="grid grid-cols-3 gap-3 px-4 py-1">
+                <div className="p-3.5 rounded-2xl flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-light)' }}>
+                  <span className="text-base font-bold" style={{ color: 'var(--text)' }}>{dbFriends.length}</span>
                   <span className="text-[9px] uppercase font-bold tracking-wider mt-0.5" style={{ color: 'var(--text-subtle)' }}>Friends</span>
                 </div>
-                <div className="p-3 rounded-2xl flex flex-col items-center justify-center text-center shadow-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-light)' }}>
-                  <span className="text-sm font-bold" style={{ color: 'var(--text)' }}>{dbChats.length}</span>
+                <div className="p-3.5 rounded-2xl flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-light)' }}>
+                  <span className="text-base font-bold" style={{ color: 'var(--text)' }}>{dbChats.length}</span>
                   <span className="text-[9px] uppercase font-bold tracking-wider mt-0.5" style={{ color: 'var(--text-subtle)' }}>Chats</span>
                 </div>
-                <div className="p-3 rounded-2xl flex flex-col items-center justify-center text-center shadow-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-light)' }}>
+                <div className="p-3.5 rounded-2xl flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-light)' }}>
                   <span className="text-xs font-bold truncate w-full" style={{ color: 'var(--text)' }}>
                     {currentUser?.createdAt ? new Date(currentUser.createdAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : 'May 2026'}
                   </span>
@@ -1805,14 +1861,14 @@ export default function ChatPage() {
               </div>
 
               {/* Biography Card */}
-              <div className="px-4 py-2">
-                <div className="p-4 rounded-2xl shadow-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-light)' }}>
-                  <div className="flex items-center justify-between mb-2">
+              <div className="px-4 py-1">
+                <div className="p-4.5 rounded-2xl shadow-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-light)' }}>
+                  <div className="flex items-center justify-between mb-2.5">
                     <span className="text-[10px] uppercase font-bold tracking-wider" style={{ color: 'var(--text-muted)' }}>Biography</span>
                     {!isEditingBio ? (
                       <button
                         onClick={() => { setEditBio(currentUser?.bio || ''); setIsEditingBio(true); }}
-                        className="text-[10px] font-bold transition-all border-none bg-transparent cursor-pointer"
+                        className="text-[10px] font-bold transition-all border-none bg-transparent cursor-pointer hover:underline"
                         style={{ color: 'var(--primary)' }}
                       >
                         Edit
@@ -1836,7 +1892,7 @@ export default function ChatPage() {
                                   'Content-Type': 'application/json',
                                   'Authorization': `Bearer ${token}`
                                 },
-                                body: JSON.stringify({ bio: editBio })
+                                  body: JSON.stringify({ bio: editBio })
                               });
                               if (response.ok) {
                                 const data = await response.json();
@@ -1880,14 +1936,25 @@ export default function ChatPage() {
               </div>
 
               {/* Recovery Email Card */}
-              <div className="px-4 py-2">
-                <div className="p-4 rounded-2xl shadow-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-light)' }}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] uppercase font-bold tracking-wider" style={{ color: 'var(--text-muted)' }}>Recovery Email</span>
+              <div className="px-4 py-1">
+                <div className="p-4.5 rounded-2xl shadow-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-light)' }}>
+                  <div className="flex items-center justify-between mb-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] uppercase font-bold tracking-wider" style={{ color: 'var(--text-muted)' }}>Recovery Email</span>
+                      {currentUser?.email ? (
+                        <span className="text-[8px] px-2 py-0.5 rounded-full font-bold bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400">
+                          Secured
+                        </span>
+                      ) : (
+                        <span className="text-[8px] px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 animate-pulse">
+                          Setup Recovery
+                        </span>
+                      )}
+                    </div>
                     {!isEditingEmail ? (
                       <button
                         onClick={() => { setEditEmailVal(currentUser?.email || ''); setIsEditingEmail(true); setEmailEditError(''); }}
-                        className="text-[10px] font-bold transition-all border-none bg-transparent cursor-pointer"
+                        className="text-[10px] font-bold transition-all border-none bg-transparent cursor-pointer hover:underline"
                         style={{ color: 'var(--primary)' }}
                       >
                         {currentUser?.email ? 'Change' : 'Set Email'}
@@ -1960,22 +2027,26 @@ export default function ChatPage() {
                       placeholder="Enter recovery email (e.g. gmail)"
                       value={editEmailVal}
                       onChange={e => setEditEmailVal(e.target.value)}
-                      className="field-input py-1.5 px-3 text-xs"
-                      style={{ background: 'var(--surface)' }}
+                      className="field-input py-1.5 px-3 text-xs w-full"
+                      style={{ background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)' }}
                     />
                   )}
+                  
+                  <p className="text-[10px] mt-2.5 leading-normal" style={{ color: 'var(--text-subtle)' }}>
+                    Your recovery email helps restore access to your account and notifications.
+                  </p>
                 </div>
               </div>
 
               {/* Log Out */}
-              <div className="px-4 py-3">
+              <div className="px-4 pt-4 pb-8">
                 <button
                   onClick={() => {
                     localStorage.removeItem('chapp_token');
                     localStorage.removeItem('chapp_user');
                     router.push('/login');
                   }}
-                  className="w-full py-2.5 rounded-2xl border text-xs font-bold flex items-center justify-center gap-2 transition-all hover:bg-rose-50/10 hover:text-rose-500 cursor-pointer"
+                  className="w-full py-3 rounded-2xl border text-xs font-bold flex items-center justify-center gap-2 transition-all hover:bg-rose-50/10 hover:text-rose-500 cursor-pointer"
                   style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
                 >
                   <LogOut className="w-4 h-4 text-rose-500" />
