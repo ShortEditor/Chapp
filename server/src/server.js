@@ -9,6 +9,7 @@ import crypto from 'crypto';
 import dotenv from 'dotenv';
 import prisma from './db.js';
 import webpush from 'web-push';
+import nodemailer from 'nodemailer';
 import {
   hashPassword,
   comparePassword,
@@ -17,7 +18,7 @@ import {
   verifySocketToken,
   verifyFirebaseIdToken
 } from './auth.js';
-import { enqueueMessage, dequeueMessages } from './queue.js';
+import { enqueueMessage, dequeueMessages, storeOtp, verifyOtp } from './queue.js';
 import { startCleanupWorker } from './cleanup.js';
 
 dotenv.config();
@@ -402,10 +403,10 @@ io.on('connection', async (socket) => {
 // signup endpoint
 app.post('/api/auth/signup', async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { username, password, email } = req.body;
 
-    if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password are required' });
+    if (!username || !password || !email) {
+      return res.status(400).json({ error: 'Username, password, and email are required' });
     }
 
     const cleanUsername = username.trim().toLowerCase();
@@ -413,13 +414,28 @@ app.post('/api/auth/signup', async (req, res) => {
       return res.status(400).json({ error: 'Username must be at least 3 characters' });
     }
 
-    // Check if user already exists
-    const existing = await prisma.user.findUnique({
+    const cleanEmail = email.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      return res.status(400).json({ error: 'Invalid email address format' });
+    }
+
+    // Check if username already exists
+    const existingUser = await prisma.user.findUnique({
       where: { username: cleanUsername }
     });
 
-    if (existing) {
+    if (existingUser) {
       return res.status(400).json({ error: 'Username is already taken' });
+    }
+
+    // Check if email already exists
+    const existingEmail = await prisma.user.findFirst({
+      where: { email: cleanEmail }
+    });
+
+    if (existingEmail) {
+      return res.status(400).json({ error: 'Email address is already in use' });
     }
 
     // Hash password & create user
@@ -428,13 +444,14 @@ app.post('/api/auth/signup', async (req, res) => {
       data: {
         username: cleanUsername,
         passwordHash,
+        email: cleanEmail,
         avatar: `avatar-${Math.floor(Math.random() * 10) + 1}`, // Random preset avatar id
         bio: 'Hey there! I am using Chapp.'
       }
     });
 
     const token = generateToken(user);
-    res.status(201).json({ token, user: { id: user.id, username: user.username, avatar: user.avatar, bio: user.bio } });
+    res.status(201).json({ token, user: { id: user.id, username: user.username, email: user.email, avatar: user.avatar, bio: user.bio } });
   } catch (err) {
     console.error('❌ [Signup] Error:', err.message);
     res.status(500).json({ error: 'Server error during signup' });
@@ -535,6 +552,132 @@ app.post('/api/auth/google', async (req, res) => {
   } catch (err) {
     console.error('❌ [Google Login] Error:', err.message);
     res.status(500).json({ error: 'Server error during Google Authentication' });
+  }
+});
+
+// Configure Mail Transporter
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || 'smtp.mailtrap.io',
+  port: parseInt(process.env.SMTP_PORT) || 2525,
+  auth: {
+    user: process.env.SMTP_USER || '',
+    pass: process.env.SMTP_PASS || ''
+  }
+});
+
+// Helper to send reset OTP email (falls back to console logging for ease of local testing)
+const sendOTPEmail = async (email, otp) => {
+  const mailOptions = {
+    from: '"Chapp Security" <security@chapp.app>',
+    to: email,
+    subject: 'Chapp Password Reset Code',
+    text: `Your Chapp password reset verification code is: ${otp}. It is valid for 10 minutes.`,
+    html: `
+      <div style="font-family: sans-serif; padding: 20px; max-width: 500px; border: 1px solid #e2e8f0; border-radius: 12px;">
+        <h2 style="color: #6366f1; margin-bottom: 20px;">Reset Your Chapp Password</h2>
+        <p>Use the following 6-digit verification code to reset your account password:</p>
+        <div style="background: #f1f5f9; padding: 16px; text-align: center; font-size: 24px; font-weight: bold; letter-spacing: 4px; border-radius: 8px; color: #1e293b; margin: 20px 0;">
+          ${otp}
+        </div>
+        <p style="font-size: 12px; color: #64748b;">This code will expire in 10 minutes. If you did not request this code, you can safely ignore this email.</p>
+      </div>
+    `
+  };
+
+  const hasCredentials = process.env.SMTP_USER || (process.env.SMTP_HOST && process.env.SMTP_PORT);
+
+  if (hasCredentials) {
+    try {
+      await transporter.sendMail(mailOptions);
+      console.log(`✉️ [Email] Password reset OTP sent to ${email} successfully.`);
+      return true;
+    } catch (err) {
+      console.error(`⚠️ [Email] Failed to send email to ${email}:`, err.message);
+    }
+  }
+
+  // Console fallback (for local development/testing)
+  console.log('\n==================================================');
+  console.log(`✉️  [MOCK EMAIL RESET CODE]`);
+  console.log(`To: ${email}`);
+  console.log(`OTP Code: ${otp}`);
+  console.log('==================================================\n');
+  return true;
+};
+
+// Request password reset OTP endpoint
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email address is required' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    // Verify user exists with this email
+    const user = await prisma.user.findFirst({
+      where: { email: cleanEmail }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'No user account found with that email address' });
+    }
+
+    // Generate 6-digit OTP code
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Store in Redis/Cache
+    await storeOtp(cleanEmail, otp);
+
+    // Send email/log OTP
+    await sendOTPEmail(cleanEmail, otp);
+
+    res.json({ message: 'A verification code has been sent to your email address' });
+  } catch (err) {
+    console.error('❌ [Forgot Password] Error:', err.message);
+    res.status(500).json({ error: 'Server error requesting password reset' });
+  }
+});
+
+// Verify OTP and reset password endpoint
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ error: 'Email, verification code, and new password are required' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    // Verify OTP
+    const isValid = await verifyOtp(cleanEmail, otp);
+    if (!isValid) {
+      return res.status(400).json({ error: 'Invalid or expired verification code' });
+    }
+
+    // Find user
+    const user = await prisma.user.findFirst({
+      where: { email: cleanEmail }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Hash and update password
+    const passwordHash = await hashPassword(newPassword);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash }
+    });
+
+    res.json({ message: 'Your password has been reset successfully' });
+  } catch (err) {
+    console.error('❌ [Reset Password] Error:', err.message);
+    res.status(500).json({ error: 'Server error resetting password' });
   }
 });
 

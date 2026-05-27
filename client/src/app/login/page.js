@@ -83,11 +83,8 @@ export default function LoginPage() {
   };
 
   return (
-    <div
-      className="min-h-screen flex items-center justify-center p-4"
-      style={{ background: 'linear-gradient(135deg, #e8f0fe 0%, #f0f2f5 50%, #e8f0fe 100%)' }}
-    >
-      <div className="auth-card w-full max-w-[400px] p-8 slide-up">
+    <div className="auth-container">
+      <div className="auth-card slide-up">
         {/* Logo */}
         <div className="flex flex-col items-center mb-6">
           <img src="/logo.png" alt="Chapp Logo" className="h-16 md:h-20 object-contain mb-3" />
@@ -105,7 +102,7 @@ export default function LoginPage() {
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="flex flex-col gap-4">
+        <form onSubmit={handleLogin} className="auth-form">
           <div>
             <label className="label-text">Username</label>
             <input
@@ -121,7 +118,12 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="label-text">Password</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <label className="label-text" style={{ marginBottom: 0 }}>Password</label>
+              <Link href="/forgot-password" style={{ color: 'var(--primary)', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', textDecoration: 'none' }}>
+                Forgot Password?
+              </Link>
+            </div>
             <div className="relative">
               <input
                 id="login-password"

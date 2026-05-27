@@ -152,3 +152,73 @@ export async function getQueueLength(receiverId) {
   }
   return inMemoryQueue.get(receiverId).length;
 }
+
+const localOtpStore = new Map();
+
+/**
+ * Stores a 6-digit OTP code in Redis (or in-memory fallback) with a 10-minute expiration.
+ */
+export async function storeOtp(email, otp) {
+  const ttlSeconds = 10 * 60; // 10 minutes
+  const key = `otp:${email.trim().toLowerCase()}`;
+
+  if (redisClient) {
+    try {
+      if (isUpstashRest) {
+        await redisClient.set(key, otp);
+        await redisClient.expire(key, ttlSeconds);
+      } else {
+        await redisClient.set(key, otp, 'EX', ttlSeconds);
+      }
+      return true;
+    } catch (err) {
+      console.error('❌ [Queue] Redis OTP store error, falling back to local memory:', err.message);
+    }
+  }
+
+  // Fallback in-memory OTP store
+  localOtpStore.set(email.trim().toLowerCase(), {
+    otp,
+    expiresAt: Date.now() + (ttlSeconds * 1000)
+  });
+  return true;
+}
+
+/**
+ * Retrieves and verifies the OTP code for a user's email.
+ * If correct, deletes it so it cannot be reused.
+ */
+export async function verifyOtp(email, providedOtp) {
+  const cleanEmail = email.trim().toLowerCase();
+  const key = `otp:${cleanEmail}`;
+
+  if (redisClient) {
+    try {
+      const storedOtp = await redisClient.get(key);
+      if (storedOtp && String(storedOtp) === String(providedOtp)) {
+        await redisClient.del(key);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('❌ [Queue] Redis OTP verify error, falling back to local memory:', err.message);
+    }
+  }
+
+  // Fallback in-memory verification
+  const record = localOtpStore.get(cleanEmail);
+  if (!record) return false;
+
+  if (record.expiresAt < Date.now()) {
+    localOtpStore.delete(cleanEmail);
+    return false;
+  }
+
+  if (String(record.otp) === String(providedOtp)) {
+    localOtpStore.delete(cleanEmail);
+    return true;
+  }
+
+  return false;
+}
+

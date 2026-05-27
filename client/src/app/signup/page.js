@@ -25,6 +25,7 @@ if (typeof window !== 'undefined') {
 
 export default function SignupPage() {
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
@@ -50,9 +51,15 @@ export default function SignupPage() {
 
   const handleSignup = async (e) => {
     e.preventDefault();
-    if (!username || !password) return;
+    if (!username || !password || !email) return;
     if (password !== confirmPassword) { setError("Passwords don't match."); return; }
     if (username.length < 3) { setError('Username must be at least 3 characters.'); return; }
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      setError('Please enter a valid email address.');
+      return;
+    }
 
     setError('');
     setLoading(true);
@@ -60,7 +67,7 @@ export default function SignupPage() {
       const res = await fetch(`${BACKEND_URL}/api/auth/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ username, password, email: email.trim() })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Signup failed. Please try again.');
@@ -77,11 +84,8 @@ export default function SignupPage() {
   };
 
   return (
-    <div
-      className="min-h-screen flex items-center justify-center p-4"
-      style={{ background: 'linear-gradient(135deg, #e8f0fe 0%, #f0f2f5 50%, #e8f0fe 100%)' }}
-    >
-      <div className="auth-card w-full max-w-[400px] p-8 slide-up">
+    <div className="auth-container">
+      <div className="auth-card slide-up">
         {/* Logo */}
         <div className="flex flex-col items-center mb-6">
           <img src="/logo.png" alt="Chapp Logo" className="h-16 md:h-20 object-contain mb-3" />
@@ -99,7 +103,7 @@ export default function SignupPage() {
           </div>
         )}
 
-        <form onSubmit={handleSignup} className="flex flex-col gap-4">
+        <form onSubmit={handleSignup} className="auth-form">
           <div>
             <label className="label-text">Username</label>
             <input
@@ -111,6 +115,20 @@ export default function SignupPage() {
               className="field-input"
               required
               autoComplete="username"
+            />
+          </div>
+
+          <div>
+            <label className="label-text">Email Address</label>
+            <input
+              id="signup-email"
+              type="email"
+              placeholder="Enter recovery email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              className="field-input"
+              required
+              autoComplete="email"
             />
           </div>
 

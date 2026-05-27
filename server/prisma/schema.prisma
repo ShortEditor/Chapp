@@ -13,6 +13,7 @@ model User {
   username     String   @unique
   passwordHash String?
   firebaseUid  String?  @unique
+  email        String?  @unique
   avatar       String?
   bio          String?  @default("Hey there! I am using Chapp.")
   status       String   @default("offline") // "online", "offline"
