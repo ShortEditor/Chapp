@@ -1126,9 +1126,10 @@ export default function ChatPage() {
               className="avatar w-9 h-9 text-xs shrink-0 relative"
               style={{ background: getAvatarColor(currentUser?.username) }}
             >
-              {currentUser?.avatar?.startsWith('http')
-                ? <img src={optimizeAvatarUrl(currentUser.avatar)} alt="me" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
-                : currentUser?.username?.slice(0, 2)}
+              {currentUser?.username?.slice(0, 2)}
+              {currentUser?.avatar?.startsWith('http') && (
+                <img src={optimizeAvatarUrl(currentUser.avatar)} alt="me" className="w-full h-full object-cover" style={{ position: 'absolute', top: 0, left: 0 }} onError={(e) => { e.target.style.display = 'none'; }} />
+              )}
               <span
                 className="status-dot"
                 style={{ background: isConnected ? 'var(--online)' : '#f59e0b', borderColor: 'var(--surface)' }}
@@ -1218,9 +1219,10 @@ export default function ChatPage() {
                         className="avatar w-12 h-12 text-sm"
                         style={{ background: getAvatarColor(friend?.username) }}
                       >
-                        {friend?.avatar?.startsWith('http')
-                          ? <img src={optimizeAvatarUrl(friend.avatar)} alt={friend.username} className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
-                          : friend?.username?.slice(0, 2)}
+                        {friend?.username?.slice(0, 2)}
+                        {friend?.avatar?.startsWith('http') && (
+                          <img src={optimizeAvatarUrl(friend.avatar)} alt={friend.username} className="w-full h-full object-cover" style={{ position: 'absolute', top: 0, left: 0 }} onError={(e) => { e.target.style.display = 'none'; }} />
+                        )}
                       </div>
                       {isOnline && (
                         <span className="status-dot status-online" style={{ borderColor: isActive ? 'var(--primary-light)' : 'var(--surface)' }} />
@@ -1310,10 +1312,11 @@ export default function ChatPage() {
                       style={{ borderRadius: '12px', background: 'var(--surface-2)', border: '1px solid var(--border-light)' }}
                     >
                       <div className="relative shrink-0">
-                        <div className="avatar w-10 h-10 text-xs" style={{ background: getAvatarColor(friend.username) }}>
-                          {friend.avatar?.startsWith('http')
-                            ? <img src={optimizeAvatarUrl(friend.avatar)} alt={friend.username} className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
-                            : friend.username.slice(0, 2)}
+                        <div className="avatar w-10 h-10 text-xs relative" style={{ background: getAvatarColor(friend.username) }}>
+                          {friend.username.slice(0, 2)}
+                          {friend.avatar?.startsWith('http') && (
+                            <img src={optimizeAvatarUrl(friend.avatar)} alt={friend.username} className="w-full h-full object-cover" style={{ position: 'absolute', top: 0, left: 0 }} onError={(e) => { e.target.style.display = 'none'; }} />
+                          )}
                         </div>
                         {isOnline && <span className="status-dot status-online" style={{ borderColor: 'var(--surface-2)' }} />}
                       </div>
@@ -1344,10 +1347,11 @@ export default function ChatPage() {
                   return (
                     <div key={req.id} className="p-3 rounded-2xl border" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
                       <div className="flex items-center gap-3 mb-3">
-                        <div className="avatar w-10 h-10 text-xs shrink-0" style={{ background: getAvatarColor(u.username) }}>
-                          {u.avatar?.startsWith('http')
-                            ? <img src={optimizeAvatarUrl(u.avatar)} alt={u.username} className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
-                            : u.username.slice(0, 2)}
+                        <div className="avatar w-10 h-10 text-xs shrink-0 relative" style={{ background: getAvatarColor(u.username) }}>
+                          {u.username.slice(0, 2)}
+                          {u.avatar?.startsWith('http') && (
+                            <img src={optimizeAvatarUrl(u.avatar)} alt={u.username} className="w-full h-full object-cover" style={{ position: 'absolute', top: 0, left: 0 }} onError={(e) => { e.target.style.display = 'none'; }} />
+                          )}
                         </div>
                         <div>
                           <p className="text-sm font-semibold flex items-center gap-1" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>{renderUsername(u.username)}</p>
@@ -1390,10 +1394,11 @@ export default function ChatPage() {
             <div className="p-4">
               <h2 className="text-lg font-semibold" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>Your Profile</h2>
               <div className="flex items-center gap-4 mt-4">
-                <div className="avatar w-12 h-12 text-sm" style={{ background: getAvatarColor(currentUser?.username) }}>
-                  {currentUser?.avatar?.startsWith('http')
-                    ? <img src={optimizeAvatarUrl(currentUser.avatar)} alt={currentUser?.username} className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
-                    : currentUser?.username?.slice(0, 2)}
+                <div className="avatar w-12 h-12 text-sm relative" style={{ background: getAvatarColor(currentUser?.username) }}>
+                  {currentUser?.username?.slice(0, 2)}
+                  {currentUser?.avatar?.startsWith('http') && (
+                    <img src={optimizeAvatarUrl(currentUser.avatar)} alt={currentUser?.username} className="w-full h-full object-cover" style={{ position: 'absolute', top: 0, left: 0 }} onError={(e) => { e.target.style.display = 'none'; }} />
+                  )}
                 </div>
                 <div>
                   <p className="font-semibold" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>{renderUsername(currentUser?.username)}</p>
@@ -1467,10 +1472,11 @@ export default function ChatPage() {
                 </button>
 
                 <div className="relative shrink-0">
-                  <div className="avatar w-10 h-10 text-sm" style={{ background: getAvatarColor(activeFriend.username) }}>
-                    {activeFriend.avatar?.startsWith('http')
-                      ? <img src={optimizeAvatarUrl(activeFriend.avatar)} alt={activeFriend.username} className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
-                      : activeFriend.username.slice(0, 2)}
+                  <div className="avatar w-10 h-10 text-sm relative" style={{ background: getAvatarColor(activeFriend.username) }}>
+                    {activeFriend.username.slice(0, 2)}
+                    {activeFriend.avatar?.startsWith('http') && (
+                      <img src={optimizeAvatarUrl(activeFriend.avatar)} alt={activeFriend.username} className="w-full h-full object-cover" style={{ position: 'absolute', top: 0, left: 0 }} onError={(e) => { e.target.style.display = 'none'; }} />
+                    )}
                   </div>
                   {onlineFriends.get(activeFriend.id) === 'online' && (
                     <span className="status-dot status-online" style={{ borderColor: 'var(--surface)' }} />
@@ -1952,10 +1958,9 @@ export default function ChatPage() {
                     }}
                     title="Click circle to directly upload avatar"
                   >
-                    {editAvatar?.startsWith('http') ? (
-                      <img src={optimizeAvatarUrl(editAvatar)} alt="preview" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
-                    ) : (
-                      <span className="text-2xl font-bold text-white">{currentUser?.username?.slice(0, 2).toUpperCase()}</span>
+                    <span className="text-2xl font-bold text-white">{currentUser?.username?.slice(0, 2).toUpperCase()}</span>
+                    {editAvatar?.startsWith('http') && (
+                      <img src={optimizeAvatarUrl(editAvatar)} alt="preview" className="w-full h-full object-cover" style={{ position: 'absolute', top: 0, left: 0 }} onError={(e) => { e.target.style.display = 'none'; }} />
                     )}
                     
                     {/* Hover Overlay with Camera Icon */}
@@ -2278,10 +2283,9 @@ export default function ChatPage() {
                       boxShadow: '0 8px 30px rgba(0,0,0,0.3)'
                     }}
                   >
-                    {partner.avatar?.startsWith('http') ? (
-                      <img src={optimizeAvatarUrl(partner.avatar)} alt={partner.username} className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
-                    ) : (
-                      partner.username?.slice(0, 2).toUpperCase()
+                    {partner.username?.slice(0, 2).toUpperCase()}
+                    {partner.avatar?.startsWith('http') && (
+                      <img src={optimizeAvatarUrl(partner.avatar)} alt={partner.username} className="w-full h-full object-cover" style={{ position: 'absolute', top: 0, left: 0 }} onError={(e) => { e.target.style.display = 'none'; }} />
                     )}
                   </div>
                 </div>
