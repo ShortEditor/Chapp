@@ -546,7 +546,7 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
     });
     
     if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json({ id: user.id, username: user.username, avatar: user.avatar, bio: user.bio, status: user.status });
+    res.json({ id: user.id, username: user.username, avatar: user.avatar, bio: user.bio, status: user.status, createdAt: user.createdAt });
   } catch (err) {
     res.status(500).json({ error: 'Server error fetching profile' });
   }
@@ -565,7 +565,7 @@ app.put('/api/users/profile', authenticateToken, async (req, res) => {
       }
     });
 
-    res.json({ id: updated.id, username: updated.username, avatar: updated.avatar, bio: updated.bio, status: updated.status });
+    res.json({ id: updated.id, username: updated.username, avatar: updated.avatar, bio: updated.bio, status: updated.status, createdAt: updated.createdAt });
   } catch (err) {
     res.status(500).json({ error: 'Server error updating profile' });
   }
@@ -640,6 +640,119 @@ app.post('/api/notifications/subscribe', authenticateToken, async (req, res) => 
   } catch (err) {
     console.error('❌ [Push Subscribe] Error:', err.message);
     res.status(500).json({ error: 'Server error saving push subscription' });
+  }
+});
+
+// Suggest friends based on mutual friends
+app.get('/api/friends/suggestions', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // 1. Get all friendships (PENDING, ACCEPTED, DECLINED) involving the user to build exclusion list
+    const myFriendships = await prisma.friendship.findMany({
+      where: {
+        OR: [
+          { senderId: userId },
+          { receiverId: userId }
+        ]
+      }
+    });
+
+    const excludeUserIds = new Set([userId]);
+    myFriendships.forEach(f => {
+      excludeUserIds.add(f.senderId);
+      excludeUserIds.add(f.receiverId);
+    });
+
+    // 2. Identify the user's accepted friends
+    const myFriendIds = myFriendships
+      .filter(f => f.status === 'ACCEPTED')
+      .map(f => f.senderId === userId ? f.receiverId : f.senderId);
+
+    let suggestions = [];
+
+    if (myFriendIds.length > 0) {
+      // 3. Find accepted friendships of those friends (friends of friends)
+      const peerFriendships = await prisma.friendship.findMany({
+        where: {
+          status: 'ACCEPTED',
+          OR: [
+            { senderId: { in: myFriendIds } },
+            { receiverId: { in: myFriendIds } }
+          ]
+        },
+        include: {
+          sender: true,
+          receiver: true
+        }
+      });
+
+      const candidatesMap = new Map();
+
+      peerFriendships.forEach(f => {
+        const isSenderFriend = myFriendIds.includes(f.senderId);
+        const isReceiverFriend = myFriendIds.includes(f.receiverId);
+
+        if (isSenderFriend && !isReceiverFriend) {
+          const candidate = f.receiver;
+          const friend = f.sender;
+          if (!excludeUserIds.has(candidate.id)) {
+            if (!candidatesMap.has(candidate.id)) {
+              candidatesMap.set(candidate.id, {
+                id: candidate.id,
+                username: candidate.username,
+                avatar: candidate.avatar,
+                bio: candidate.bio,
+                mutualFriends: []
+              });
+            }
+            candidatesMap.get(candidate.id).mutualFriends.push(friend.username);
+          }
+        } else if (!isSenderFriend && isReceiverFriend) {
+          const candidate = f.sender;
+          const friend = f.receiver;
+          if (!excludeUserIds.has(candidate.id)) {
+            if (!candidatesMap.has(candidate.id)) {
+              candidatesMap.set(candidate.id, {
+                id: candidate.id,
+                username: candidate.username,
+                avatar: candidate.avatar,
+                bio: candidate.bio,
+                mutualFriends: []
+              });
+            }
+            candidatesMap.get(candidate.id).mutualFriends.push(friend.username);
+          }
+        }
+      });
+
+      suggestions = Array.from(candidatesMap.values());
+      // Sort by mutual friends count descending
+      suggestions.sort((a, b) => b.mutualFriends.length - a.mutualFriends.length);
+    }
+
+    // 4. Fallback: If no suggestions found based on mutual friends, suggest random users
+    if (suggestions.length === 0) {
+      const otherUsers = await prisma.user.findMany({
+        where: {
+          id: { notIn: Array.from(excludeUserIds) }
+        },
+        take: 5,
+        orderBy: { createdAt: 'desc' }
+      });
+      suggestions = otherUsers.map(u => ({
+        id: u.id,
+        username: u.username,
+        avatar: u.avatar,
+        bio: u.bio,
+        mutualFriends: []
+      }));
+    }
+
+    res.json(suggestions);
+  } catch (err) {
+    console.error('❌ [Suggestions GET] Error:', err.message);
+    res.status(500).json({ error: 'Server error fetching suggestions' });
   }
 });
 

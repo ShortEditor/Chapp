@@ -219,6 +219,14 @@ export default function ChatPage() {
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [customStatus, setCustomStatus] = useState('');
 
+  // Friend suggestions states
+  const [suggestions, setSuggestions] = useState([]);
+  const [fetchingSuggestions, setFetchingSuggestions] = useState(false);
+  const [sendingRequestIds, setSendingRequestIds] = useState(new Set());
+
+  // Profile editing mode state
+  const [isEditingBio, setIsEditingBio] = useState(false);
+
   // Zero-Knowledge Backup states
   const [settingsTab, setSettingsTab] = useState('profile'); // 'profile' | 'backup'
   const [backupPassword, setBackupPassword] = useState('');
@@ -433,6 +441,86 @@ export default function ChatPage() {
       console.error('❌ Failed to fetch friends list:', err);
     }
   };
+
+  const fetchSuggestions = async () => {
+    const token = localStorage.getItem('chapp_token');
+    if (!token) return;
+    setFetchingSuggestions(true);
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/friends/suggestions`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setSuggestions(data);
+      }
+    } catch (err) {
+      console.error('❌ Failed to fetch suggestions:', err);
+    } finally {
+      setFetchingSuggestions(false);
+    }
+  };
+
+  const handleAddSuggestedFriend = async (username) => {
+    const token = localStorage.getItem('chapp_token');
+    if (!token) return;
+
+    const cand = suggestions.find(s => s.username === username);
+    if (cand) {
+      setSendingRequestIds(prev => {
+        const next = new Set(prev);
+        next.add(cand.id);
+        return next;
+      });
+    }
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/friends/request`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ username })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send request');
+      }
+
+      setFriendRequestMessage({ text: data.message || 'Request sent successfully!', type: 'success' });
+      
+      confetti({
+        particleCount: 50,
+        spread: 40,
+        origin: { y: 0.8 },
+        colors: ['#6366f1', '#a5b4fc', '#4f46e5']
+      });
+
+      fetchSuggestions();
+      refreshFriendsAndRequests(token);
+    } catch (err) {
+      setFriendRequestMessage({ text: err.message, type: 'error' });
+    } finally {
+      if (cand) {
+        setSendingRequestIds(prev => {
+          const next = new Set(prev);
+          next.delete(cand.id);
+          return next;
+        });
+      }
+    }
+  };
+
+  // Sync suggestions when friends tab is selected
+  useEffect(() => {
+    if (activeTab === 'friends') {
+      fetchSuggestions();
+    }
+  }, [activeTab]);
+
 
   const registerPushNotifications = async () => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
@@ -1267,14 +1355,15 @@ export default function ChatPage() {
                   value={newFriendUsername}
                   onChange={e => setNewFriendUsername(e.target.value)}
                   className="msg-field flex-1"
-                  style={{ borderRadius: '10px', padding: '9px 14px', fontSize: '13px' }}
+                  style={{ borderRadius: '10px', padding: '9px 14px', fontSize: '13px', height: '38px' }}
                 />
                 <button
                   type="submit"
-                  className="p-2.5 rounded-xl text-white shrink-0 flex items-center justify-center transition-opacity"
-                  style={{ background: 'var(--primary)' }}
+                  className="px-3 rounded-xl text-white font-semibold text-xs shrink-0 flex items-center gap-1.5 justify-center transition-opacity hover:opacity-90 active:scale-95"
+                  style={{ background: 'var(--primary)', height: '38px' }}
                 >
-                  <UserPlus className="w-4 h-4" />
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>Add Friend</span>
                 </button>
               </form>
 
@@ -1290,6 +1379,60 @@ export default function ChatPage() {
                   {friendRequestMessage.text}
                 </div>
               )}
+
+              {/* Friend Suggestions */}
+              {suggestions.length > 0 && (
+                <div className="space-y-2 mt-4 pt-1 border-t" style={{ borderColor: 'var(--border-light)' }}>
+                  <div className="flex items-center justify-between px-1">
+                    <h3 className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                      People You May Know
+                    </h3>
+                    {fetchingSuggestions && <RefreshCw className="w-3 h-3 animate-spin" style={{ color: 'var(--text-subtle)' }} />}
+                  </div>
+                  <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                    {suggestions.map(s => (
+                      <div
+                        key={s.id}
+                        className="flex items-center justify-between p-2.5 rounded-2xl border"
+                        style={{ background: 'var(--surface-2)', borderColor: 'var(--border-light)' }}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="avatar w-9 h-9 text-xs relative" style={{ background: getAvatarColor(s.username) }}>
+                            {s.username.slice(0, 2)}
+                            {s.avatar?.startsWith('http') && (
+                              <img src={optimizeAvatarUrl(s.avatar)} alt={s.username} className="w-full h-full object-cover" style={{ position: 'absolute', top: 0, left: 0 }} onError={(e) => { e.target.style.display = 'none'; }} />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold truncate flex items-center gap-1" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>
+                              {renderUsername(s.username)}
+                            </p>
+                            <p className="text-[10px] truncate" style={{ color: 'var(--text-subtle)' }}>
+                              {s.mutualFriends && s.mutualFriends.length > 0
+                                ? `${s.mutualFriends.length} mutual friend${s.mutualFriends.length > 1 ? 's' : ''}`
+                                : 'New to Chapp'}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleAddSuggestedFriend(s.username)}
+                          disabled={sendingRequestIds.has(s.id)}
+                          className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-white transition-opacity shrink-0 hover:opacity-90 active:scale-95 border-none"
+                          style={{ background: 'var(--primary)' }}
+                        >
+                          {sendingRequestIds.has(s.id) ? 'Adding...' : 'Add'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between px-1 pt-2">
+                <h3 className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                  All Friends
+                </h3>
+              </div>
 
               {dbFriends.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-36 text-center">
@@ -1390,20 +1533,204 @@ export default function ChatPage() {
             </div>
           )}
           {/* ── PROFILE TAB ── */}
+          {/* ── PROFILE TAB ── */}
           {activeTab === 'profile' && (
-            <div className="p-4">
-              <h2 className="text-lg font-semibold" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>Your Profile</h2>
-              <div className="flex items-center gap-4 mt-4">
-                <div className="avatar w-12 h-12 text-sm relative" style={{ background: getAvatarColor(currentUser?.username) }}>
-                  {currentUser?.username?.slice(0, 2)}
+            <div className="flex flex-col h-full overflow-y-auto pb-4" style={{ background: 'var(--surface)' }}>
+              {/* Premium Gradient Banner */}
+              <div 
+                className="relative h-28 shrink-0 rounded-b-2xl shadow-sm overflow-hidden" 
+                style={{ 
+                  background: 'linear-gradient(135deg, var(--primary) 0%, #a5b4fc 50%, #f472b6 100%)' 
+                }}
+              >
+                {/* Background decorative glass orb */}
+                <div className="absolute -top-10 -left-10 w-28 h-28 rounded-full bg-white/10 blur-xl" />
+                <div className="absolute top-3 right-3">
+                  <button
+                    onClick={() => { setSettingsTab('profile'); setShowSettings(true); }}
+                    className="p-2 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-full text-white transition-all duration-200 border-none cursor-pointer flex items-center justify-center"
+                    title="Edit Profile Settings"
+                  >
+                    <Settings className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Profile Card & Avatar */}
+              <div className="text-center px-4 pb-4">
+                <label
+                  className="w-20 h-20 rounded-full border-4 flex items-center justify-center overflow-hidden shrink-0 relative group cursor-pointer hover:opacity-95 active:scale-95 transition-all mx-auto -mt-10 shadow-md"
+                  style={{
+                    background: getAvatarColor(currentUser?.username),
+                    borderColor: 'var(--surface)',
+                  }}
+                  title="Click to change profile picture"
+                >
+                  <span className="text-xl font-bold text-white uppercase">{currentUser?.username?.slice(0, 2)}</span>
                   {currentUser?.avatar?.startsWith('http') && (
-                    <img src={optimizeAvatarUrl(currentUser.avatar)} alt={currentUser?.username} className="w-full h-full object-cover" style={{ position: 'absolute', top: 0, left: 0 }} onError={(e) => { e.target.style.display = 'none'; }} />
+                    <img src={optimizeAvatarUrl(currentUser.avatar)} alt="avatar" className="w-full h-full object-cover" style={{ position: 'absolute', top: 0, left: 0 }} onError={(e) => { e.target.style.display = 'none'; }} />
+                  )}
+                  {/* Camera overlay icon */}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-opacity text-white">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                    </svg>
+                  </div>
+                  {avatarUploading && (
+                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                      <RefreshCw className="w-5 h-5 text-white animate-spin" />
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAvatarUpload}
+                    className="hidden"
+                    disabled={avatarUploading}
+                  />
+                </label>
+
+                <h2 className="text-base font-bold mt-2 flex items-center justify-center gap-1.5" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>
+                  {renderUsername(currentUser?.username)}
+                </h2>
+                <p className="text-[10px] uppercase font-bold tracking-wider" style={{ color: 'var(--text-subtle)' }}>
+                  Active Status: Online
+                </p>
+              </div>
+
+              {/* Statistics Grid */}
+              <div className="grid grid-cols-3 gap-3 px-4 py-2">
+                <div className="p-3 rounded-2xl flex flex-col items-center justify-center text-center shadow-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-light)' }}>
+                  <span className="text-sm font-bold" style={{ color: 'var(--text)' }}>{dbFriends.length}</span>
+                  <span className="text-[9px] uppercase font-bold tracking-wider mt-0.5" style={{ color: 'var(--text-subtle)' }}>Friends</span>
+                </div>
+                <div className="p-3 rounded-2xl flex flex-col items-center justify-center text-center shadow-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-light)' }}>
+                  <span className="text-sm font-bold" style={{ color: 'var(--text)' }}>{dbChats.length}</span>
+                  <span className="text-[9px] uppercase font-bold tracking-wider mt-0.5" style={{ color: 'var(--text-subtle)' }}>Chats</span>
+                </div>
+                <div className="p-3 rounded-2xl flex flex-col items-center justify-center text-center shadow-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-light)' }}>
+                  <span className="text-xs font-bold truncate w-full" style={{ color: 'var(--text)' }}>
+                    {currentUser?.createdAt ? new Date(currentUser.createdAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : 'May 2026'}
+                  </span>
+                  <span className="text-[9px] uppercase font-bold tracking-wider mt-1" style={{ color: 'var(--text-subtle)' }}>Joined</span>
+                </div>
+              </div>
+
+              {/* Biography Card */}
+              <div className="px-4 py-2">
+                <div className="p-4 rounded-2xl shadow-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-light)' }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] uppercase font-bold tracking-wider" style={{ color: 'var(--text-muted)' }}>Biography</span>
+                    {!isEditingBio ? (
+                      <button
+                        onClick={() => { setEditBio(currentUser?.bio || ''); setIsEditingBio(true); }}
+                        className="text-[10px] font-bold transition-all border-none bg-transparent cursor-pointer"
+                        style={{ color: 'var(--primary)' }}
+                      >
+                        Edit
+                      </button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setIsEditingBio(false)}
+                          className="text-[10px] font-bold text-slate-400 border-none bg-transparent cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={async () => {
+                            const token = localStorage.getItem('chapp_token');
+                            if (!token) return;
+                            try {
+                              const response = await fetch(`${BACKEND_URL}/api/users/profile`, {
+                                method: 'PUT',
+                                headers: {
+                                  'Content-Type': 'application/json',
+                                  'Authorization': `Bearer ${token}`
+                                },
+                                body: JSON.stringify({ bio: editBio })
+                              });
+                              if (response.ok) {
+                                const data = await response.json();
+                                setCurrentUser(data);
+                                localStorage.setItem('chapp_user', JSON.stringify(data));
+                                setIsEditingBio(false);
+                                confetti({
+                                  particleCount: 35,
+                                  spread: 25,
+                                  origin: { y: 0.8 },
+                                  colors: ['#818cf8', '#f472b6', '#6366f1']
+                                });
+                              }
+                            } catch (err) {
+                              console.error(err);
+                            }
+                          }}
+                          className="text-[10px] font-bold border-none bg-transparent cursor-pointer"
+                          style={{ color: 'var(--primary)' }}
+                        >
+                          Save
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  {!isEditingBio ? (
+                    <p className="text-xs leading-relaxed" style={{ color: 'var(--text-muted)', whiteSpace: 'pre-wrap' }}>
+                      {currentUser?.bio || 'Hey there! I am using Chapp.'}
+                    </p>
+                  ) : (
+                    <textarea
+                      className="w-full text-xs p-2 rounded-xl border focus:outline-none resize-none font-sans"
+                      style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}
+                      rows={3}
+                      value={editBio}
+                      onChange={e => setEditBio(e.target.value)}
+                      placeholder="Write a short biography about yourself..."
+                    />
                   )}
                 </div>
-                <div>
-                  <p className="font-semibold" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>{renderUsername(currentUser?.username)}</p>
-                  <p className="text-xs text-muted">{currentUser?.bio || 'No bio set.'}</p>
+              </div>
+
+              {/* Security & Sync Info Card */}
+              <div className="px-4 py-2">
+                <div className="p-4 rounded-2xl shadow-sm space-y-3" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-light)' }}>
+                  <span className="text-[10px] uppercase font-bold tracking-wider block" style={{ color: 'var(--text-muted)' }}>Security & Backup</span>
+                  
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <Database className="w-4 h-4" style={{ color: 'var(--text-subtle)' }} />
+                      <div className="min-w-0">
+                        <p className="font-semibold" style={{ color: 'var(--text)' }}>Zero-Knowledge Sync</p>
+                        <p className="text-[10px]" style={{ color: 'var(--text-subtle)' }}>
+                          {lastBackupTime ? `Last synced: ${new Date(lastBackupTime).toLocaleDateString()} ${new Date(lastBackupTime).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}` : 'No backups saved'}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => { setSettingsTab('backup'); setShowSettings(true); }}
+                      className="px-2.5 py-1 rounded-lg text-[10px] font-bold text-white transition-opacity border-none cursor-pointer"
+                      style={{ background: 'var(--primary)' }}
+                    >
+                      Manage
+                    </button>
+                  </div>
                 </div>
+              </div>
+
+              {/* Log Out */}
+              <div className="px-4 py-3 mt-auto">
+                <button
+                  onClick={() => {
+                    localStorage.removeItem('chapp_token');
+                    localStorage.removeItem('chapp_user');
+                    router.push('/login');
+                  }}
+                  className="w-full py-2.5 rounded-2xl border text-xs font-bold flex items-center justify-center gap-2 transition-all hover:bg-rose-50/10 hover:text-rose-500 cursor-pointer"
+                  style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+                >
+                  <LogOut className="w-4 h-4 text-rose-500" />
+                  <span>Log Out</span>
+                </button>
               </div>
             </div>
           )}

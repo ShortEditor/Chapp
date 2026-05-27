@@ -149,6 +149,7 @@ h1, h2, h3, h4, h5 {
 
 /* ─── Avatar ─────────────────────────────────────────────────── */
 .avatar {
+  position: relative;
   border-radius: 50%;
   overflow: hidden;
   display: flex;

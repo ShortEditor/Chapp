@@ -436,9 +436,10 @@ export function SocketProvider({ children }) {
 
     const newSocket = io(BACKEND_URL, {
       auth: { token },
-      transports: ['polling', 'websocket'], // polling first → upgrades to WS (required for Render)
-      reconnectionAttempts: 20,
-      reconnectionDelay: 2000,
+      transports: ['websocket', 'polling'], // Try websocket first for instant connection, polling as fallback
+      reconnectionAttempts: 30,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
       timeout: 20000,
     });
 
