@@ -15,6 +15,7 @@ model User {
   firebaseUid  String?  @unique
   email        String?  @unique
   avatar       String?
+  banner       String?
   bio          String?  @default("Hey there! I am using Chapp.")
   status       String   @default("offline") // "online", "offline"
   createdAt    DateTime @default(now())

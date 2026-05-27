@@ -37,8 +37,8 @@ self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = new URL(request.url);
 
-  // 1. Skip non-GET requests or WebSocket connections (e.g. Socket.IO path)
-  if (request.method !== 'GET' || url.pathname.includes('/socket.io')) {
+  // 1. Skip non-GET requests, non-http/https protocols, or WebSocket connections
+  if (request.method !== 'GET' || (url.protocol !== 'http:' && url.protocol !== 'https:') || url.pathname.includes('/socket.io')) {
     return;
   }
 
