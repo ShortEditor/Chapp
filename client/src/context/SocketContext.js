@@ -642,6 +642,16 @@ export function SocketProvider({ children }) {
       // Components can listen to this via the socket ref
     });
 
+    // MESSAGE DELETED (unsend for both)
+    newSocket.on('message-deleted', async ({ messageId }) => {
+      try {
+        await db.messages.delete(messageId);
+        console.log(`🗑️ [SocketContext] Message ${messageId} deleted from local DB`);
+      } catch (err) {
+        console.error('❌ [SocketContext] Error deleting message from DB:', err);
+      }
+    });
+
     socketRef.current = newSocket;
     setSocket(newSocket);
   }, []);
@@ -733,6 +743,26 @@ export function SocketProvider({ children }) {
     activeSocket.emit(isTyping ? 'typing-start' : 'typing-stop', { receiverId });
   }, []);
 
+  // DELETE MESSAGE — unsend for both users
+  const deleteMessage = useCallback(async (messageId, recipientId) => {
+    const activeSocket = socketRef.current;
+    try {
+      // Remove from local IndexedDB
+      await db.messages.delete(messageId);
+      console.log(`🗑️ [SocketContext] Message ${messageId} deleted locally`);
+
+      // Emit to server to relay to other user
+      if (activeSocket && activeSocket.connected) {
+        activeSocket.emit('delete-message', { messageId, recipientId });
+        console.log(`🗑️ [SocketContext] Delete event emitted for message ${messageId}`);
+      }
+      return true;
+    } catch (err) {
+      console.error('❌ [SocketContext] Failed to delete message:', err);
+      return false;
+    }
+  }, []);
+
   return (
     <SocketContext.Provider
       value={{
@@ -744,6 +774,7 @@ export function SocketProvider({ children }) {
         connectSocket,
         disconnectSocket,
         sendMessage,
+        deleteMessage,
         emitTyping,
         setActiveChat,
         socketRef,

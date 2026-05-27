@@ -266,6 +266,22 @@ io.on('connection', async (socket) => {
     }
   });
 
+  // EVENT: delete-message (Unsend for both users)
+  socket.on('delete-message', (data) => {
+    const { messageId, recipientId } = data;
+    if (!messageId || !recipientId) return;
+
+    console.log(`🗑️ [Message] Delete request: ${username} wants to delete message ${messageId} for user ${recipientId}`);
+
+    const recipientSocketId = onlineUsers.get(recipientId);
+    if (recipientSocketId) {
+      io.to(recipientSocketId).emit('message-deleted', { messageId, deletedBy: userId });
+      console.log(`🗑️ [Message] Deletion relayed to online user ${recipientId}`);
+    }
+    // Also confirm deletion back to the sender
+    socket.emit('message-deleted', { messageId, deletedBy: userId });
+  });
+
   // EVENT: WebRTC Call Signaling - call-user
   socket.on('call-user', (data) => {
     const { to, offer } = data;

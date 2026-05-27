@@ -40,7 +40,8 @@ import {
   Bluetooth,
   Headphones,
   ChevronUp,
-  User
+  User,
+  Trash2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { encryptData, decryptData } from '@/lib/crypto';
@@ -179,6 +180,7 @@ export default function ChatPage() {
     connectSocket,
     disconnectSocket,
     sendMessage,
+    deleteMessage,
     emitTyping,
     setActiveChat,
     callState,
@@ -229,6 +231,10 @@ export default function ChatPage() {
   const [uploading, setUploading] = useState(false);
   const [pendingMedia, setPendingMedia] = useState(null); // { url, type, name }
   const [previewImage, setPreviewImage] = useState(null); // Full-screen image preview
+
+  // Message delete (unsend) states
+  const [deleteTarget, setDeleteTarget] = useState(null); // { id, senderId, receiverId }
+  const longPressTimerRef = useRef(null);
 
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -338,6 +344,16 @@ export default function ChatPage() {
       setOnlineFriends(statusMap);
     }
   }, [dbFriends, setOnlineFriends]);
+
+  // Keep activeFriend in sync with latest dbFriends data (e.g. avatar updates)
+  useEffect(() => {
+    if (activeFriend && dbFriends.length > 0) {
+      const updated = dbFriends.find(f => f.id === activeFriend.id);
+      if (updated && (updated.avatar !== activeFriend.avatar || updated.bio !== activeFriend.bio || updated.username !== activeFriend.username)) {
+        setActiveFriend(updated);
+      }
+    }
+  }, [dbFriends, activeFriend]);
 
   // Scroll to bottom of message list on new messages
   useEffect(() => {
@@ -1562,6 +1578,27 @@ export default function ChatPage() {
                         paddingLeft: isMe ? '52px' : '0',
                         paddingRight: isMe ? '0' : '52px',
                       }}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setDeleteTarget({ id: msg.id, senderId: msg.senderId, receiverId: msg.receiverId });
+                      }}
+                      onTouchStart={() => {
+                        longPressTimerRef.current = setTimeout(() => {
+                          setDeleteTarget({ id: msg.id, senderId: msg.senderId, receiverId: msg.receiverId });
+                        }, 600);
+                      }}
+                      onTouchEnd={() => {
+                        if (longPressTimerRef.current) {
+                          clearTimeout(longPressTimerRef.current);
+                          longPressTimerRef.current = null;
+                        }
+                      }}
+                      onTouchMove={() => {
+                        if (longPressTimerRef.current) {
+                          clearTimeout(longPressTimerRef.current);
+                          longPressTimerRef.current = null;
+                        }
+                      }}
                     >
                       {/* Bubble */}
                       <div
@@ -1653,6 +1690,115 @@ export default function ChatPage() {
               )}
               <div ref={messagesEndRef} />
             </div>
+
+            {/* Delete Message Confirmation Modal */}
+            {deleteTarget && (
+              <div
+                style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: 'rgba(0,0,0,0.5)',
+                  backdropFilter: 'blur(4px)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 9999,
+                  padding: '20px',
+                }}
+                onClick={() => setDeleteTarget(null)}
+              >
+                <div
+                  style={{
+                    background: 'var(--card)',
+                    borderRadius: '16px',
+                    padding: '24px',
+                    maxWidth: '320px',
+                    width: '100%',
+                    boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+                    border: '1px solid var(--border-light)',
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                    <div style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '12px',
+                      background: 'linear-gradient(135deg, #ff4757 0%, #ff6b81 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}>
+                      <Trash2 className="w-5 h-5" style={{ color: '#fff' }} />
+                    </div>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>
+                        Delete Message
+                      </h3>
+                      <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        This will delete for everyone
+                      </p>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                    <button
+                      onClick={() => setDeleteTarget(null)}
+                      style={{
+                        flex: 1,
+                        padding: '11px 16px',
+                        borderRadius: '10px',
+                        border: '1px solid var(--border-light)',
+                        background: 'transparent',
+                        color: 'var(--text)',
+                        fontSize: '14px',
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                        fontFamily: 'var(--font-jakarta)',
+                        transition: 'background 0.2s',
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'var(--border-light)'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (deleteTarget) {
+                          const recipientId = deleteTarget.senderId === currentUser?.id
+                            ? deleteTarget.receiverId
+                            : deleteTarget.senderId;
+                          await deleteMessage(deleteTarget.id, recipientId);
+                          setDeleteTarget(null);
+                        }
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '11px 16px',
+                        borderRadius: '10px',
+                        border: 'none',
+                        background: 'linear-gradient(135deg, #ff4757 0%, #ff6b81 100%)',
+                        color: '#fff',
+                        fontSize: '14px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        fontFamily: 'var(--font-jakarta)',
+                        transition: 'transform 0.15s, box-shadow 0.15s',
+                        boxShadow: '0 4px 12px rgba(255,71,87,0.3)',
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.02)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(255,71,87,0.4)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(255,71,87,0.3)'; }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Input Area */}
             <div className="msg-input shrink-0">
