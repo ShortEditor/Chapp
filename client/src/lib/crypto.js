@@ -148,3 +148,116 @@ export async function decryptData(backupString, password) {
   const decoder = new TextDecoder();
   return decoder.decode(decryptedBuffer);
 }
+
+/**
+ * Generate ECDH key pair for E2EE
+ * @returns {Promise<{publicKeyJwk: Object, privateKeyJwk: Object}>}
+ */
+export async function generateE2EEKeyPair() {
+  const keyPair = await window.crypto.subtle.generateKey(
+    {
+      name: 'ECDH',
+      namedCurve: 'P-256'
+    },
+    true, // extractable
+    ['deriveKey', 'deriveBits']
+  );
+
+  const publicKeyJwk = await window.crypto.subtle.exportKey('jwk', keyPair.publicKey);
+  const privateKeyJwk = await window.crypto.subtle.exportKey('jwk', keyPair.privateKey);
+
+  return { publicKeyJwk, privateKeyJwk };
+}
+
+/**
+ * Derive shared AES-GCM key from own private key and friend's public key
+ * @param {Object} ownPrivateKeyJwk
+ * @param {Object} friendPublicKeyJwk
+ * @returns {Promise<CryptoKey>}
+ */
+export async function deriveSharedKey(ownPrivateKeyJwk, friendPublicKeyJwk) {
+  const ownPrivateKey = await window.crypto.subtle.importKey(
+    'jwk',
+    ownPrivateKeyJwk,
+    { name: 'ECDH', namedCurve: 'P-256' },
+    false,
+    ['deriveKey']
+  );
+
+  const friendPublicKey = await window.crypto.subtle.importKey(
+    'jwk',
+    friendPublicKeyJwk,
+    { name: 'ECDH', namedCurve: 'P-256' },
+    true,
+    []
+  );
+
+  return await window.crypto.subtle.deriveKey(
+    {
+      name: 'ECDH',
+      public: friendPublicKey
+    },
+    ownPrivateKey,
+    {
+      name: 'AES-GCM',
+      length: 256
+    },
+    false, // not extractable
+    ['encrypt', 'decrypt']
+  );
+}
+
+/**
+ * Encrypt plaintext using a derived shared AES-GCM key
+ * @param {string} plaintext
+ * @param {CryptoKey} sharedKey
+ * @returns {Promise<string>} Format: 'ivHex:ciphertextHex'
+ */
+export async function encryptWithSharedKey(plaintext, sharedKey) {
+  const encoder = new TextEncoder();
+  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  
+  const ciphertextBuffer = await window.crypto.subtle.encrypt(
+    {
+      name: 'AES-GCM',
+      iv: iv
+    },
+    sharedKey,
+    encoder.encode(plaintext)
+  );
+
+  const ivHex = bufToHex(iv);
+  const ciphertextHex = bufToHex(ciphertextBuffer);
+
+  return `${ivHex}:${ciphertextHex}`;
+}
+
+/**
+ * Decrypt ciphertext using a derived shared AES-GCM key
+ * @param {string} encryptedString Format: 'ivHex:ciphertextHex'
+ * @param {CryptoKey} sharedKey
+ * @returns {Promise<string>}
+ */
+export async function decryptWithSharedKey(encryptedString, sharedKey) {
+  const parts = encryptedString.split(':');
+  if (parts.length !== 2) {
+    throw new Error('Invalid encrypted message format');
+  }
+
+  const [ivHex, ciphertextHex] = parts;
+  const iv = hexToBuf(ivHex);
+  const ciphertext = hexToBuf(ciphertextHex);
+
+  const decryptedBuffer = await window.crypto.subtle.decrypt(
+    {
+      name: 'AES-GCM',
+      iv: iv
+    },
+    sharedKey,
+    ciphertext
+  );
+
+  const decoder = new TextDecoder();
+  return decoder.decode(decryptedBuffer);
+}
+

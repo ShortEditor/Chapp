@@ -25,6 +25,9 @@ model User {
   backupUpdatedAt DateTime?
   pushSubscription String?
 
+  // E2EE Public Key (JWK format, stored as JSON string)
+  publicKey String?
+
   // Relationships
   sentRequests     Friendship[] @relation("SentFriendships")
   receivedRequests Friendship[] @relation("ReceivedFriendships")

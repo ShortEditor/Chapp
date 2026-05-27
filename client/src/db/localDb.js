@@ -12,4 +12,8 @@ db.version(1).stores({
   messages: 'id, chatId, senderId, receiverId, text, mediaUrl, mediaType, timestamp, status'
 });
 
+db.version(2).stores({
+  e2eeKeys: 'id'
+});
+
 export default db;

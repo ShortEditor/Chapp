@@ -3,6 +3,12 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { io } from 'socket.io-client';
 import db from '../db/localDb';
+import {
+  generateE2EEKeyPair,
+  deriveSharedKey,
+  encryptWithSharedKey,
+  decryptWithSharedKey
+} from '../lib/crypto';
 
 const SocketContext = createContext(null);
 
@@ -61,6 +67,120 @@ export function SocketProvider({ children }) {
   const pendingCandidatesRef = useRef([]);
   const ringbackAudioRef = useRef(null);
   const incomingAudioRef = useRef(null);
+
+  const sharedKeyCacheRef = useRef(new Map());
+
+  const getSharedKey = useCallback(async (friendId) => {
+    if (sharedKeyCacheRef.current.has(friendId)) {
+      return sharedKeyCacheRef.current.get(friendId);
+    }
+    
+    const currentUser = JSON.parse(localStorage.getItem('chapp_user') || '{}');
+    const token = localStorage.getItem('chapp_token');
+    if (!currentUser.id || !token) return null;
+
+    // 1. Get own private key
+    const ownPrivateKeyRecord = await db.e2eeKeys.get('private_key_' + currentUser.id);
+    if (!ownPrivateKeyRecord) {
+      console.warn('⚠️ [E2EE] Own private key not found in local IndexedDB');
+      return null;
+    }
+
+    // 2. Get friend's public key
+    let friend = await db.friends.get(friendId);
+    let friendPublicKeyJwk = null;
+    
+    if (friend && friend.publicKey) {
+      try {
+        friendPublicKeyJwk = typeof friend.publicKey === 'string' ? JSON.parse(friend.publicKey) : friend.publicKey;
+      } catch (_) {}
+    }
+
+    if (!friendPublicKeyJwk) {
+      console.log(`🔑 [E2EE] Fetching public key for friend ${friendId} from server...`);
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/users/${friendId}/public-key`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.publicKey) {
+            friendPublicKeyJwk = typeof data.publicKey === 'string' ? JSON.parse(data.publicKey) : data.publicKey;
+            // Cache in friends DB
+            if (friend) {
+              await db.friends.update(friendId, { publicKey: data.publicKey });
+            }
+          }
+        }
+      } catch (err) {
+        console.error('❌ [E2EE] Failed to fetch friend public key:', err);
+      }
+    }
+
+    if (!friendPublicKeyJwk) {
+      console.warn(`⚠️ [E2EE] Could not obtain public key for friend ${friendId}`);
+      return null;
+    }
+
+    // 3. Derive shared key
+    try {
+      const sharedKey = await deriveSharedKey(ownPrivateKeyRecord.key, friendPublicKeyJwk);
+      sharedKeyCacheRef.current.set(friendId, sharedKey);
+      return sharedKey;
+    } catch (err) {
+      console.error('❌ [E2EE] Error deriving shared key:', err);
+      return null;
+    }
+  }, []);
+
+  const initializeE2EEKeys = useCallback(async (userId, token) => {
+    try {
+      if (!userId) return;
+      const privateKeyRecord = await db.e2eeKeys.get('private_key_' + userId);
+      
+      let publicKeyJwk;
+      if (!privateKeyRecord) {
+        console.log('🔑 [E2EE] No local keys found for user. Generating new ECDH keypair...');
+        const keys = await generateE2EEKeyPair();
+        await db.e2eeKeys.put({ id: 'private_key_' + userId, key: keys.privateKeyJwk });
+        await db.e2eeKeys.put({ id: 'public_key_' + userId, key: keys.publicKeyJwk });
+        publicKeyJwk = keys.publicKeyJwk;
+        
+        console.log('🔑 [E2EE] Uploading public key to server...');
+        await fetch(`${BACKEND_URL}/api/users/profile/public-key`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ publicKey: JSON.stringify(publicKeyJwk) })
+        });
+      } else {
+        console.log('🔑 [E2EE] Local keys loaded.');
+        // Ensure server has it (e.g. if database reset)
+        const userJson = localStorage.getItem('chapp_user');
+        if (userJson) {
+          const user = JSON.parse(userJson);
+          if (!user.publicKey) {
+            const pubKeyRecord = await db.e2eeKeys.get('public_key_' + userId);
+            if (pubKeyRecord) {
+              console.log('🔑 [E2EE] Server missing public key. Uploading local key...');
+              await fetch(`${BACKEND_URL}/api/users/profile/public-key`, {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ publicKey: JSON.stringify(pubKeyRecord.key) })
+              });
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('❌ [E2EE] Key initialization failed:', err);
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -414,19 +534,39 @@ export function SocketProvider({ children }) {
 
       console.log(`🔄 [SocketContext] Flushing ${unsent.length} offline messages...`);
       for (const msg of unsent) {
+        let textToSend = msg.text || '';
+        let mediaUrlToSend = msg.mediaUrl || null;
+        let isEncrypted = false;
+
+        const sharedKey = await getSharedKey(msg.receiverId);
+        if (sharedKey) {
+          try {
+            if (textToSend) {
+              textToSend = await encryptWithSharedKey(textToSend, sharedKey);
+            }
+            if (mediaUrlToSend) {
+              mediaUrlToSend = await encryptWithSharedKey(mediaUrlToSend, sharedKey);
+            }
+            isEncrypted = true;
+          } catch (err) {
+            console.error('❌ [E2EE] Encryption failed for offline message:', err);
+          }
+        }
+
         socketToUse.emit('send-message', {
           id: msg.id,
           receiverId: msg.receiverId,
-          text: msg.text,
-          mediaUrl: msg.mediaUrl,
+          text: textToSend,
+          mediaUrl: mediaUrlToSend,
           mediaType: msg.mediaType,
-          timestamp: msg.timestamp
+          timestamp: msg.timestamp,
+          isEncrypted
         });
       }
     } catch (err) {
       console.error('❌ [SocketContext] Error flushing offline messages:', err);
     }
-  }, []);
+  }, [getSharedKey]);
 
   const connectSocket = useCallback((token) => {
     // Don't reconnect if already connected
@@ -451,9 +591,17 @@ export function SocketProvider({ children }) {
       timeout: 20000,
     });
 
+
+
     newSocket.on('connect', () => {
       console.log('✅ [SocketContext] Connected! Socket ID:', newSocket.id);
       setIsConnected(true);
+      
+      const currentUser = JSON.parse(localStorage.getItem('chapp_user') || '{}');
+      if (currentUser.id) {
+        initializeE2EEKeys(currentUser.id, token);
+      }
+
       flushOfflineMessages(newSocket);
       if (activeChatRef.current) {
         syncPendingTicks(activeChatRef.current);
@@ -470,14 +618,36 @@ export function SocketProvider({ children }) {
       console.error('❌ [SocketContext] Connection error:', err.message, '| Backend:', BACKEND_URL);
       setIsConnected(false);
     });
-
     // RECEIVE REALTIME MESSAGE
     newSocket.on('receive-message', async (message) => {
-      const { id, senderId, receiverId, text, mediaUrl, mediaType, timestamp } = message;
+      const { id, senderId, receiverId, text, mediaUrl, mediaType, timestamp, isEncrypted } = message;
       try {
+        let decryptedText = text || '';
+        let decryptedMediaUrl = mediaUrl || null;
+
+        if (isEncrypted) {
+          const sharedKey = await getSharedKey(senderId);
+          if (sharedKey) {
+            try {
+              if (text) {
+                decryptedText = await decryptWithSharedKey(text, sharedKey);
+              }
+              if (mediaUrl) {
+                decryptedMediaUrl = await decryptWithSharedKey(mediaUrl, sharedKey);
+              }
+            } catch (err) {
+              console.error('❌ [E2EE] Decryption failed for realtime message:', err);
+              decryptedText = '🔒 [Decryption error: Failed to decrypt message]';
+            }
+          } else {
+            console.warn('⚠️ [E2EE] No shared key for decryption of realtime message');
+            decryptedText = '🔒 [Decryption error: Shared key not found]';
+          }
+        }
+
         await db.messages.put({
           id, chatId: senderId, senderId, receiverId,
-          text, mediaUrl, mediaType, timestamp, status: 'ack'
+          text: decryptedText, mediaUrl: decryptedMediaUrl, mediaType, timestamp, status: 'ack'
         });
 
         const isActiveChat = activeChatRef.current === senderId;
@@ -485,7 +655,7 @@ export function SocketProvider({ children }) {
 
         await db.chats.put({
           friendId: senderId,
-          lastMessageText: text || (mediaType === 'image' ? '📷 Photo' : mediaType === 'video' ? '🎥 Video' : '📁 File'),
+          lastMessageText: decryptedText || (mediaType === 'image' ? '📷 Photo' : mediaType === 'video' ? '🎥 Video' : '📁 File'),
           lastMessageTime: timestamp,
           unreadCount: isActiveChat ? 0 : (existingChat?.unreadCount || 0) + 1
         });
@@ -501,17 +671,41 @@ export function SocketProvider({ children }) {
       const ackIds = [];
       try {
         for (const msg of messages) {
-          const { id, senderId, receiverId, text, mediaUrl, mediaType, timestamp } = msg;
+          const { id, senderId, receiverId, text, mediaUrl, mediaType, timestamp, isEncrypted } = msg;
+          
+          let decryptedText = text || '';
+          let decryptedMediaUrl = mediaUrl || null;
+
+          if (isEncrypted) {
+            const sharedKey = await getSharedKey(senderId);
+            if (sharedKey) {
+              try {
+                if (text) {
+                  decryptedText = await decryptWithSharedKey(text, sharedKey);
+                }
+                if (mediaUrl) {
+                  decryptedMediaUrl = await decryptWithSharedKey(mediaUrl, sharedKey);
+                }
+              } catch (err) {
+                console.error('❌ [E2EE] Decryption failed for offline message:', err);
+                decryptedText = '🔒 [Decryption error: Failed to decrypt message]';
+              }
+            } else {
+              console.warn('⚠️ [E2EE] No shared key for decryption of offline message');
+              decryptedText = '🔒 [Decryption error: Shared key not found]';
+            }
+          }
+
           await db.messages.put({
             id, chatId: senderId, senderId, receiverId,
-            text, mediaUrl, mediaType, timestamp, status: 'ack'
+            text: decryptedText, mediaUrl: decryptedMediaUrl, mediaType, timestamp, status: 'ack'
           });
 
           const isActiveChat = activeChatRef.current === senderId;
           const existingChat = await db.chats.get(senderId);
           await db.chats.put({
             friendId: senderId,
-            lastMessageText: text || (mediaType === 'image' ? '📷 Photo' : mediaType === 'video' ? '🎥 Video' : '📁 File'),
+            lastMessageText: decryptedText || (mediaType === 'image' ? '📷 Photo' : mediaType === 'video' ? '🎥 Video' : '📁 File'),
             lastMessageTime: timestamp,
             unreadCount: isActiveChat ? 0 : (existingChat?.unreadCount || 0) + 1
           });
@@ -726,15 +920,35 @@ export function SocketProvider({ children }) {
       });
 
       if (isOnline) {
+        let textToSend = text || '';
+        let mediaUrlToSend = mediaUrl || null;
+        let isEncrypted = false;
+
+        const sharedKey = await getSharedKey(receiverId);
+        if (sharedKey) {
+          try {
+            if (textToSend) {
+              textToSend = await encryptWithSharedKey(textToSend, sharedKey);
+            }
+            if (mediaUrlToSend) {
+              mediaUrlToSend = await encryptWithSharedKey(mediaUrlToSend, sharedKey);
+            }
+            isEncrypted = true;
+          } catch (err) {
+            console.error('❌ [E2EE] Encryption failed in sendMessage:', err);
+          }
+        }
+
         activeSocket.emit('send-message', {
           id: messageId,
           receiverId,
-          text,
-          mediaUrl,
+          text: textToSend,
+          mediaUrl: mediaUrlToSend,
           mediaType,
-          timestamp
+          timestamp,
+          isEncrypted
         });
-        console.log('📤 [SocketContext] Message sent (online):', messageId);
+        console.log('📤 [SocketContext] Message sent (online):', messageId, 'Encrypted:', isEncrypted);
       } else {
         console.log('⏳ [SocketContext] Device is offline. Message queued in local IndexedDB:', messageId);
       }
@@ -744,7 +958,7 @@ export function SocketProvider({ children }) {
       console.error('❌ [SocketContext] Failed to send message:', err);
       return null;
     }
-  }, []); // No deps — always reads from socketRef directly
+  }, [getSharedKey]);
 
   const emitTyping = useCallback((receiverId, isTyping) => {
     const activeSocket = socketRef.current;

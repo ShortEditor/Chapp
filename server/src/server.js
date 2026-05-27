@@ -111,6 +111,47 @@ io.on('connection', async (socket) => {
   const userId = socket.user.id;
   const username = socket.user.username;
 
+  // Helper to verify friendship
+  const isFriend = async (uId, targetId) => {
+    try {
+      const friendship = await prisma.friendship.findFirst({
+        where: {
+          OR: [
+            { senderId: uId, receiverId: targetId, status: 'ACCEPTED' },
+            { senderId: targetId, receiverId: uId, status: 'ACCEPTED' }
+          ]
+        }
+      });
+      return !!friendship;
+    } catch (err) {
+      console.error('❌ Error checking friendship status:', err);
+      return false;
+    }
+  };
+
+  // Rate limiting middleware per socket connection
+  const eventLimitMap = new Map();
+  socket.use(([event, data], next) => {
+    if (['send-message', 'call-user', 'delete-message', 'message-ack'].includes(event)) {
+      const now = Date.now();
+      const limit = eventLimitMap.get(event) || { count: 0, resetTime: now + 10000 };
+      
+      if (now > limit.resetTime) {
+        limit.count = 0;
+        limit.resetTime = now + 10000;
+      }
+      
+      limit.count++;
+      eventLimitMap.set(event, limit);
+      
+      if (limit.count > 15) {
+        console.warn(`⚠️ [Rate Limit] User ${username} exceeded rate limit on event: ${event}`);
+        return next(new Error(`Rate limit exceeded for event: ${event}. Please slow down.`));
+      }
+    }
+    next();
+  });
+
   console.log(`⚡ [Socket] User connected: ${username} (${userId})`);
   
   // Register active socket connection
@@ -165,7 +206,7 @@ io.on('connection', async (socket) => {
 
   // EVENT: send-message
   socket.on('send-message', async (data) => {
-    const { id, receiverId, text, mediaUrl, mediaType, timestamp } = data;
+    const { id, receiverId, text, mediaUrl, mediaType, timestamp, isEncrypted } = data;
     
     if (!receiverId) return;
 
@@ -177,7 +218,8 @@ io.on('connection', async (socket) => {
       mediaUrl: mediaUrl || null,
       mediaType: mediaType || null,
       timestamp: timestamp || Date.now(),
-      status: 'delivered' // Initial state relayed is single tick (delivered)
+      status: 'delivered', // Initial state relayed is single tick (delivered)
+      isEncrypted: isEncrypted || false
     };
 
     const receiverSocketId = onlineUsers.get(receiverId);
@@ -283,9 +325,19 @@ io.on('connection', async (socket) => {
     socket.emit('message-deleted', { messageId, deletedBy: userId });
   });
 
-  // EVENT: WebRTC Call Signaling - call-user
-  socket.on('call-user', (data) => {
+  // EVENT: WebRTC Call Signaling - call-user (friendship-guarded)
+  socket.on('call-user', async (data) => {
     const { to, offer } = data;
+    if (!to) return;
+
+    // Verify caller and callee are accepted friends
+    const areFriends = await isFriend(userId, to);
+    if (!areFriends) {
+      console.warn(`⚠️ [WebRTC] Blocked call attempt: ${username} is not friends with ${to}`);
+      socket.emit('call-rejected', { to, reason: 'not_friends' });
+      return;
+    }
+
     const receiverSocketId = onlineUsers.get(to);
     if (receiverSocketId) {
       io.to(receiverSocketId).emit('incoming-call', {
@@ -327,8 +379,17 @@ io.on('connection', async (socket) => {
     }
   });
 
-  socket.on('ice-candidate', (data) => {
+  socket.on('ice-candidate', async (data) => {
     const { to, candidate } = data;
+    if (!to) return;
+
+    // Verify ICE candidates are only exchanged between friends
+    const areFriends = await isFriend(userId, to);
+    if (!areFriends) {
+      console.warn(`⚠️ [WebRTC] Blocked ICE candidate from non-friend: ${username} -> ${to}`);
+      return;
+    }
+
     const peerSocketId = onlineUsers.get(to);
     if (peerSocketId) {
       io.to(peerSocketId).emit('ice-candidate', {
@@ -451,7 +512,7 @@ app.post('/api/auth/signup', async (req, res) => {
     });
 
     const token = generateToken(user);
-    res.status(201).json({ token, user: { id: user.id, username: user.username, email: user.email, avatar: user.avatar, bio: user.bio } });
+    res.status(201).json({ token, user: { id: user.id, username: user.username, email: user.email, avatar: user.avatar, banner: user.banner, bio: user.bio } });
   } catch (err) {
     console.error('❌ [Signup] Error:', err.message);
     res.status(500).json({ error: 'Server error during signup' });
@@ -482,7 +543,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const token = generateToken(user);
-    res.json({ token, user: { id: user.id, username: user.username, avatar: user.avatar, bio: user.bio, email: user.email } });
+    res.json({ token, user: { id: user.id, username: user.username, avatar: user.avatar, banner: user.banner, bio: user.bio, email: user.email } });
   } catch (err) {
     console.error('❌ [Login] Error:', err.message);
     res.status(500).json({ error: 'Server error during login' });
@@ -548,7 +609,7 @@ app.post('/api/auth/google', async (req, res) => {
     }
 
     const sessionToken = generateToken(user);
-    res.json({ token: sessionToken, user: { id: user.id, username: user.username, avatar: user.avatar, bio: user.bio, email: user.email } });
+    res.json({ token: sessionToken, user: { id: user.id, username: user.username, avatar: user.avatar, banner: user.banner, bio: user.bio, email: user.email } });
   } catch (err) {
     console.error('❌ [Google Login] Error:', err.message);
     res.status(500).json({ error: 'Server error during Google Authentication' });
@@ -726,7 +787,7 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
     });
     
     if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json({ id: user.id, username: user.username, avatar: user.avatar, bio: user.bio, status: user.status, createdAt: user.createdAt, email: user.email });
+    res.json({ id: user.id, username: user.username, avatar: user.avatar, banner: user.banner, bio: user.bio, status: user.status, createdAt: user.createdAt, email: user.email });
   } catch (err) {
     res.status(500).json({ error: 'Server error fetching profile' });
   }
@@ -734,7 +795,7 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
 
 app.put('/api/users/profile', authenticateToken, async (req, res) => {
   try {
-    const { bio, avatar, status, email } = req.body;
+    const { bio, avatar, status, email, banner } = req.body;
     
     let emailUpdate = {};
     if (email !== undefined) {
@@ -768,14 +829,130 @@ app.put('/api/users/profile', authenticateToken, async (req, res) => {
         ...(bio !== undefined && { bio }),
         ...(avatar !== undefined && { avatar }),
         ...(status !== undefined && { status }),
+        ...(banner !== undefined && { banner }),
         ...emailUpdate
       }
     });
 
-    res.json({ id: updated.id, username: updated.username, avatar: updated.avatar, bio: updated.bio, status: updated.status, createdAt: updated.createdAt, email: updated.email });
+    res.json({ id: updated.id, username: updated.username, avatar: updated.avatar, banner: updated.banner, bio: updated.bio, status: updated.status, createdAt: updated.createdAt, email: updated.email });
   } catch (err) {
     console.error('❌ [Profile Update] Error:', err.message);
     res.status(500).json({ error: 'Server error updating profile' });
+  }
+});
+
+// GET public profile of another user
+app.get('/api/users/:id/profile', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: {
+        sentRequests: {
+          where: { status: 'ACCEPTED' }
+        },
+        receivedRequests: {
+          where: { status: 'ACCEPTED' }
+        }
+      }
+    });
+
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    
+    const friendsCount = user.sentRequests.length + user.receivedRequests.length;
+
+    res.json({
+      id: user.id,
+      username: user.username,
+      avatar: user.avatar,
+      banner: user.banner,
+      bio: user.bio,
+      status: user.status,
+      createdAt: user.createdAt,
+      publicKey: user.publicKey || null,
+      friendsCount
+    });
+  } catch (err) {
+    console.error('❌ [User Public Profile GET] Error:', err.message);
+    res.status(500).json({ error: 'Server error fetching user public profile' });
+  }
+});
+
+// -------------------------------------------------------------
+// E2EE PUBLIC KEY MANAGEMENT
+// -------------------------------------------------------------
+
+// Upload/update the authenticated user's ECDH public key
+app.put('/api/keys/public', authenticateToken, async (req, res) => {
+  try {
+    const { publicKey } = req.body;
+
+    if (!publicKey) {
+      return res.status(400).json({ error: 'publicKey is required (JWK format JSON string)' });
+    }
+
+    // Validate that publicKey looks like a valid JWK
+    try {
+      const parsed = typeof publicKey === 'string' ? JSON.parse(publicKey) : publicKey;
+      if (parsed.kty !== 'EC' || parsed.crv !== 'P-256') {
+        return res.status(400).json({ error: 'publicKey must be an EC P-256 JWK' });
+      }
+    } catch (parseErr) {
+      return res.status(400).json({ error: 'publicKey must be valid JSON (JWK format)' });
+    }
+
+    const keyString = typeof publicKey === 'string' ? publicKey : JSON.stringify(publicKey);
+
+    await prisma.user.update({
+      where: { id: req.user.id },
+      data: { publicKey: keyString }
+    });
+
+    console.log(`🔐 [E2EE] Public key uploaded for user: ${req.user.username}`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('❌ [E2EE Key Upload] Error:', err.message);
+    res.status(500).json({ error: 'Server error uploading public key' });
+  }
+});
+
+// Fetch a friend's ECDH public key (requires accepted friendship)
+app.get('/api/keys/public/:userId', authenticateToken, async (req, res) => {
+  try {
+    const { userId: targetId } = req.params;
+    const requesterId = req.user.id;
+
+    // Verify they are accepted friends
+    const friendship = await prisma.friendship.findFirst({
+      where: {
+        OR: [
+          { senderId: requesterId, receiverId: targetId, status: 'ACCEPTED' },
+          { senderId: targetId, receiverId: requesterId, status: 'ACCEPTED' }
+        ]
+      }
+    });
+
+    if (!friendship) {
+      return res.status(403).json({ error: 'You can only fetch public keys of accepted friends' });
+    }
+
+    const targetUser = await prisma.user.findUnique({
+      where: { id: targetId },
+      select: { id: true, username: true, publicKey: true }
+    });
+
+    if (!targetUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({
+      id: targetUser.id,
+      username: targetUser.username,
+      publicKey: targetUser.publicKey || null
+    });
+  } catch (err) {
+    console.error('❌ [E2EE Key Fetch] Error:', err.message);
+    res.status(500).json({ error: 'Server error fetching public key' });
   }
 });
 
@@ -997,7 +1174,8 @@ app.get('/api/friends', authenticateToken, async (req, res) => {
           username: targetUser.username,
           avatar: targetUser.avatar,
           bio: targetUser.bio,
-          status: targetUser.status
+          status: targetUser.status,
+          publicKey: targetUser.publicKey || null
         }
       };
     });
