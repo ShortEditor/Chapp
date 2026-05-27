@@ -7,10 +7,18 @@ import db from '../db/localDb';
 const SocketContext = createContext(null);
 
 let BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'https://chapp-oxa7.onrender.com').replace(/^["']|["']$/g, '');
-if (typeof window !== 'undefined' && (BACKEND_URL.includes('localhost') || BACKEND_URL.includes('127.0.0.1'))) {
+if (typeof window !== 'undefined') {
   const hostname = window.location.hostname;
   if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
-    BACKEND_URL = BACKEND_URL.replace('localhost', hostname).replace('127.0.0.1', hostname);
+    if (BACKEND_URL.includes('localhost') || BACKEND_URL.includes('127.0.0.1')) {
+      BACKEND_URL = 'https://chapp-oxa7.onrender.com';
+    }
+  } else {
+    if (BACKEND_URL.includes('localhost') || BACKEND_URL.includes('127.0.0.1')) {
+      const parts = BACKEND_URL.split(':');
+      const port = parts[parts.length - 1] || '5000';
+      BACKEND_URL = `${window.location.protocol}//${hostname}:${port}`;
+    }
   }
 }
 

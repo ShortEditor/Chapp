@@ -47,10 +47,18 @@ import confetti from 'canvas-confetti';
 import { encryptData, decryptData } from '@/lib/crypto';
 
 let BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'https://chapp-oxa7.onrender.com').replace(/^["']|["']$/g, '');
-if (typeof window !== 'undefined' && (BACKEND_URL.includes('localhost') || BACKEND_URL.includes('127.0.0.1'))) {
+if (typeof window !== 'undefined') {
   const hostname = window.location.hostname;
   if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
-    BACKEND_URL = BACKEND_URL.replace('localhost', hostname).replace('127.0.0.1', hostname);
+    if (BACKEND_URL.includes('localhost') || BACKEND_URL.includes('127.0.0.1')) {
+      BACKEND_URL = 'https://chapp-oxa7.onrender.com';
+    }
+  } else {
+    if (BACKEND_URL.includes('localhost') || BACKEND_URL.includes('127.0.0.1')) {
+      const parts = BACKEND_URL.split(':');
+      const port = parts[parts.length - 1] || '5000';
+      BACKEND_URL = `${window.location.protocol}//${hostname}:${port}`;
+    }
   }
 }
 
@@ -1535,7 +1543,7 @@ export default function ChatPage() {
           {/* ── PROFILE TAB ── */}
           {/* ── PROFILE TAB ── */}
           {activeTab === 'profile' && (
-            <div className="flex flex-col h-full overflow-y-auto pb-4" style={{ background: 'var(--surface)' }}>
+            <div className="pb-6 space-y-4" style={{ background: 'var(--surface)' }}>
               {/* Premium Gradient Banner */}
               <div 
                 className="relative h-28 shrink-0 rounded-b-2xl shadow-sm overflow-hidden" 
@@ -1718,7 +1726,7 @@ export default function ChatPage() {
               </div>
 
               {/* Log Out */}
-              <div className="px-4 py-3 mt-auto">
+              <div className="px-4 py-3">
                 <button
                   onClick={() => {
                     localStorage.removeItem('chapp_token');

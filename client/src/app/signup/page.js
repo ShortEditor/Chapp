@@ -7,10 +7,18 @@ import { useSocket } from '@/context/SocketContext';
 import { Eye, EyeOff, AlertCircle, MessageSquare } from 'lucide-react';
 
 let BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'https://chapp-oxa7.onrender.com').replace(/^["']|["']$/g, '');
-if (typeof window !== 'undefined' && (BACKEND_URL.includes('localhost') || BACKEND_URL.includes('127.0.0.1'))) {
+if (typeof window !== 'undefined') {
   const hostname = window.location.hostname;
   if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
-    BACKEND_URL = BACKEND_URL.replace('localhost', hostname).replace('127.0.0.1', hostname);
+    if (BACKEND_URL.includes('localhost') || BACKEND_URL.includes('127.0.0.1')) {
+      BACKEND_URL = 'https://chapp-oxa7.onrender.com';
+    }
+  } else {
+    if (BACKEND_URL.includes('localhost') || BACKEND_URL.includes('127.0.0.1')) {
+      const parts = BACKEND_URL.split(':');
+      const port = parts[parts.length - 1] || '5000';
+      BACKEND_URL = `${window.location.protocol}//${hostname}:${port}`;
+    }
   }
 }
 
@@ -76,15 +84,7 @@ export default function SignupPage() {
       <div className="auth-card w-full max-w-[400px] p-8 slide-up">
         {/* Logo */}
         <div className="flex flex-col items-center mb-6">
-          <div
-            className="w-14 h-14 rounded-2xl flex items-center justify-center mb-3 shadow-md"
-            style={{ background: 'linear-gradient(135deg, #1a73e8, #6c63ff)' }}
-          >
-
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight text-[#202124] mb-0.5" style={{ fontFamily: 'var(--font-display)' }}>
-            Chapp
-          </h1>
+          <img src="/logo.png" alt="Chapp Logo" className="h-16 md:h-20 object-contain mb-3" />
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
             Create an account to get started
           </p>
