@@ -681,6 +681,43 @@ app.post('/api/auth/reset-password', async (req, res) => {
   }
 });
 
+// search users endpoint
+app.get('/api/users/search', authenticateToken, async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q || q.trim() === '') {
+      return res.json([]);
+    }
+
+    const query = q.trim().toLowerCase();
+
+    // Find users where username contains the query, excluding current user
+    const users = await prisma.user.findMany({
+      where: {
+        username: {
+          contains: query,
+          mode: 'insensitive'
+        },
+        NOT: {
+          id: req.user.id
+        }
+      },
+      select: {
+        id: true,
+        username: true,
+        avatar: true,
+        status: true
+      },
+      take: 10
+    });
+
+    res.json(users);
+  } catch (err) {
+    console.error('❌ [User Search] Error:', err.message);
+    res.status(500).json({ error: 'Server error searching users' });
+  }
+});
+
 // profile routes (protected)
 app.get('/api/users/profile', authenticateToken, async (req, res) => {
   try {

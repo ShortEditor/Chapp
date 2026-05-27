@@ -245,12 +245,17 @@ export default function ChatPage() {
   const [lastBackupTime, setLastBackupTime] = useState(null);
   const [autoBackupEnabled, setAutoBackupEnabled] = useState(false);
 
-  // Recovery email prompt states for existing users
-  const [showEmailPrompt, setShowEmailPrompt] = useState(false);
-  const [promptEmail, setPromptEmail] = useState('');
-  const [emailPromptError, setEmailPromptError] = useState('');
-  const [emailPromptSuccess, setEmailPromptSuccess] = useState(false);
-  const [emailPromptLoading, setEmailPromptLoading] = useState(false);
+  // Recovery email editing states
+  const [isEditingEmail, setIsEditingEmail] = useState(false);
+  const [editEmailVal, setEditEmailVal] = useState('');
+  const [emailEditError, setEmailEditError] = useState('');
+
+  // Dynamic user search states
+  const [searchSuggestions, setSearchSuggestions] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+
+  // Conversation search state
+  const [chatSearchQuery, setChatSearchQuery] = useState('');
 
   // Media upload states
   const [uploading, setUploading] = useState(false);
@@ -314,11 +319,6 @@ export default function ChatPage() {
         setEditBio(data.bio || '');
         setEditAvatar(data.avatar || '');
         setCustomStatus(data.status || 'online');
-        
-        // Ask recovery email for already existing accounts that don't have email registered
-        if (!data.email) {
-          setShowEmailPrompt(true);
-        }
       })
       .catch(err => console.error('❌ Error syncing profile on startup:', err));
 
@@ -542,6 +542,36 @@ export default function ChatPage() {
       fetchSuggestions();
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (!newFriendUsername.trim()) {
+      setSearchSuggestions([]);
+      setSearchLoading(false);
+      return;
+    }
+
+    setSearchLoading(true);
+    const timer = setTimeout(async () => {
+      const token = localStorage.getItem('chapp_token');
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/users/search?q=${encodeURIComponent(newFriendUsername.trim())}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setSearchSuggestions(data);
+        }
+      } catch (err) {
+        console.error('Error searching users:', err);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [newFriendUsername]);
+
+
 
 
   const registerPushNotifications = async () => {
@@ -1108,50 +1138,7 @@ export default function ChatPage() {
     }
   };
 
-  const handleSavePromptEmail = async (e) => {
-    e.preventDefault();
-    if (!promptEmail) return;
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(promptEmail.trim())) {
-      setEmailPromptError('Please enter a valid email address.');
-      return;
-    }
-
-    setEmailPromptError('');
-    setEmailPromptLoading(true);
-
-    try {
-      const token = localStorage.getItem('chapp_token');
-      const res = await fetch(`${BACKEND_URL}/api/users/profile`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ email: promptEmail.trim() })
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to save email. Please try again.');
-
-      // Update current user locally
-      setCurrentUser(data);
-      localStorage.setItem('chapp_user', JSON.stringify(data));
-      
-      setEmailPromptSuccess(true);
-      confetti();
-
-      // Close modal after 2 seconds
-      setTimeout(() => {
-        setShowEmailPrompt(false);
-      }, 2000);
-    } catch (err) {
-      setEmailPromptError(err.message);
-    } finally {
-      setEmailPromptLoading(false);
-    }
-  };
 
   // -------------------------------------------------------------
   // MEDIA UPLOAD & ATTACHMENTS
@@ -1256,6 +1243,13 @@ export default function ChatPage() {
   // Avatar helper
   const avatarColors = ['#4a90d9','#e67e22','#27ae60','#9b59b6','#e74c3c','#1abc9c','#f39c12','#2980b9'];
   const getAvatarColor = (name) => avatarColors[(name?.charCodeAt(0) || 0) % avatarColors.length];
+  const filteredChats = dbChats.filter(chat => {
+    const friend = dbFriends.find(f => f.id === chat.friendId);
+    const friendName = friend?.username || 'Unknown';
+    const lastMsg = chat.lastMessageText || '';
+    return friendName.toLowerCase().includes(chatSearchQuery.toLowerCase()) || 
+           lastMsg.toLowerCase().includes(chatSearchQuery.toLowerCase());
+  });
 
   return (
     <div className="flex h-[100dvh] overflow-hidden" style={{ background: 'var(--bg)' }}>
@@ -1294,7 +1288,7 @@ export default function ChatPage() {
               Chapp
             </h1>
           </div>
-          <div className="flex items-center">
+          <div className="flex items-center gap-1.5">
             <button
               onClick={() => setShowSettings(true)}
               className="p-2 rounded-full transition-colors"
@@ -1305,16 +1299,18 @@ export default function ChatPage() {
             >
               <Settings className="w-5 h-5" />
             </button>
-            <button
-              onClick={handleLogout}
-              className="p-2 rounded-full transition-colors"
-              style={{ color: 'var(--text-muted)' }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#fce8e6'; e.currentTarget.style.color = '#c5221f'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
-              title="Sign out"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
+            {activeTab !== 'chats' && (
+              <button
+                onClick={handleLogout}
+                className="p-2 rounded-full transition-colors"
+                style={{ color: 'var(--text-muted)' }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#fce8e6'; e.currentTarget.style.color = '#c5221f'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                title="Sign out"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -1351,79 +1347,204 @@ export default function ChatPage() {
 
           {/* ── CHATS TAB ── */}
           {activeTab === 'chats' && (
-            dbChats.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-48 px-6 text-center">
-                <MessageSquare className="w-10 h-10 mb-3" style={{ color: 'var(--text-subtle)' }} />
-                <p className="text-sm font-semibold" style={{ color: 'var(--text-muted)' }}>No conversations yet</p>
-                <p className="text-xs mt-1" style={{ color: 'var(--text-subtle)' }}>Add friends to start chatting</p>
-              </div>
-            ) : (
-              dbChats.map(chat => {
-                const friend = dbFriends.find(f => f.id === chat.friendId);
-                const isOnline = onlineFriends.get(chat.friendId) === 'online';
-                const isTyping = typingFriends.has(chat.friendId);
-                const isActive = activeFriend?.id === chat.friendId;
-                return (
-                  <div
-                    key={chat.friendId}
-                    onClick={() => setActiveFriend(friend || { id: chat.friendId, username: 'Unknown' })}
-                    className={`conv-item ${isActive ? 'active' : ''}`}
+            <div className="p-3 space-y-3">
+              {/* Search Bar */}
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search conversations..."
+                  value={chatSearchQuery}
+                  onChange={e => setChatSearchQuery(e.target.value)}
+                  className="msg-field w-full"
+                  style={{ borderRadius: '10px', padding: '9px 14px', fontSize: '13px', height: '38px' }}
+                />
+                {chatSearchQuery && (
+                  <button
+                    onClick={() => setChatSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400 hover:text-slate-600 border-none bg-transparent cursor-pointer"
                   >
-                    <div className="relative shrink-0">
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              {filteredChats.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-48 px-6 text-center">
+                  <MessageSquare className="w-10 h-10 mb-3" style={{ color: 'var(--text-subtle)' }} />
+                  <p className="text-sm font-semibold" style={{ color: 'var(--text-muted)' }}>
+                    {dbChats.length === 0 ? 'No conversations yet' : 'No matches found'}
+                  </p>
+                  {dbChats.length === 0 && (
+                    <p className="text-xs mt-1" style={{ color: 'var(--text-subtle)' }}>Add friends to start chatting</p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-0.5">
+                  {filteredChats.map(chat => {
+                    const friend = dbFriends.find(f => f.id === chat.friendId);
+                    const isOnline = onlineFriends.get(chat.friendId) === 'online';
+                    const isTyping = typingFriends.has(chat.friendId);
+                    const isActive = activeFriend?.id === chat.friendId;
+                    return (
                       <div
-                        className="avatar w-12 h-12 text-sm"
-                        style={{ background: getAvatarColor(friend?.username) }}
+                        key={chat.friendId}
+                        onClick={() => setActiveFriend(friend || { id: chat.friendId, username: 'Unknown' })}
+                        className={`conv-item ${isActive ? 'active' : ''}`}
+                        style={{ borderRadius: '12px' }}
                       >
-                        {friend?.username?.slice(0, 2)}
-                        {friend?.avatar?.startsWith('http') && (
-                          <img src={optimizeAvatarUrl(friend.avatar)} alt={friend.username} className="w-full h-full object-cover" style={{ position: 'absolute', top: 0, left: 0 }} onError={(e) => { e.target.style.display = 'none'; }} />
-                        )}
-                      </div>
-                      {isOnline && (
-                        <span className="status-dot status-online" style={{ borderColor: isActive ? 'var(--primary-light)' : 'var(--surface)' }} />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-semibold truncate flex items-center gap-1" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>
-                          {renderUsername(friend?.username || 'Chapp User')}
-                        </span>
-                        <span className="text-[10px] shrink-0 ml-2" style={{ color: 'var(--text-subtle)' }}>
-                          {formatTime(chat.lastMessageTime)}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between mt-0.5">
-                        <p className="text-xs truncate" style={{ color: isTyping ? 'var(--primary)' : 'var(--text-muted)' }}>
-                          {isTyping ? 'typing...' : chat.lastMessageText}
-                        </p>
-                        {chat.unreadCount > 0 && (
-                          <span
-                            className="ml-2 shrink-0 w-5 h-5 rounded-full text-[10px] font-bold text-white flex items-center justify-center"
-                            style={{ background: 'var(--primary)' }}
+                        <div className="relative shrink-0">
+                          <div
+                            className="avatar w-12 h-12 text-sm"
+                            style={{ background: getAvatarColor(friend?.username) }}
                           >
-                            {chat.unreadCount}
-                          </span>
-                        )}
+                            {friend?.username?.slice(0, 2)}
+                            {friend?.avatar?.startsWith('http') && (
+                              <img src={optimizeAvatarUrl(friend.avatar)} alt={friend.username} className="w-full h-full object-cover" style={{ position: 'absolute', top: 0, left: 0 }} onError={(e) => { e.target.style.display = 'none'; }} />
+                            )}
+                          </div>
+                          {isOnline && (
+                            <span className="status-dot status-online" style={{ borderColor: isActive ? 'var(--primary-light)' : 'var(--surface)' }} />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-semibold truncate flex items-center gap-1" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>
+                              {renderUsername(friend?.username || 'Chapp User')}
+                            </span>
+                            <span className="text-[10px] shrink-0 ml-2" style={{ color: 'var(--text-subtle)' }}>
+                              {formatTime(chat.lastMessageTime)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between mt-0.5">
+                            <p className="text-xs truncate" style={{ color: isTyping ? 'var(--primary)' : 'var(--text-muted)' }}>
+                              {isTyping ? 'typing...' : chat.lastMessageText}
+                            </p>
+                            {chat.unreadCount > 0 && (
+                              <span
+                                className="ml-2 shrink-0 w-5 h-5 rounded-full text-[10px] font-bold text-white flex items-center justify-center"
+                                style={{ background: 'var(--primary)' }}
+                              >
+                                {chat.unreadCount}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                );
-              })
-            )
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           )}
 
           {/* ── FRIENDS TAB ── */}
           {activeTab === 'friends' && (
             <div className="p-3 space-y-3">
               <form onSubmit={handleAddFriend} className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Search by username..."
-                  value={newFriendUsername}
-                  onChange={e => setNewFriendUsername(e.target.value)}
-                  className="msg-field flex-1"
-                  style={{ borderRadius: '10px', padding: '9px 14px', fontSize: '13px', height: '38px' }}
-                />
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    placeholder="Search by username..."
+                    value={newFriendUsername}
+                    onChange={e => setNewFriendUsername(e.target.value)}
+                    className="msg-field w-full"
+                    style={{ borderRadius: '10px', padding: '9px 14px', fontSize: '13px', height: '38px' }}
+                  />
+                  {searchLoading && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" style={{ color: 'var(--text-subtle)' }} />
+                    </div>
+                  )}
+                  
+                  {/* Suggestions Dropdown */}
+                  {searchSuggestions.length > 0 && (
+                    <>
+                      {/* Click-away backdrop */}
+                      <div className="fixed inset-0 z-40" onClick={() => setSearchSuggestions([])} />
+                      
+                      <div className="absolute left-0 right-0 mt-1.5 rounded-2xl shadow-xl border overflow-hidden z-50 animate-fade-in"
+                        style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+                        <div className="max-h-60 overflow-y-auto divide-y" style={{ divideColor: 'var(--border-light)' }}>
+                          {searchSuggestions.map(user => {
+                            const isAdding = sendingRequestIds.has(user.id);
+                            return (
+                              <div key={user.id} className="flex items-center justify-between p-2.5 hover:bg-slate-50/10 transition-colors">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <div className="avatar w-8 h-8 text-xs relative font-bold" style={{ background: getAvatarColor(user.username) }}>
+                                    {user.username.slice(0, 2)}
+                                    {user.avatar?.startsWith('http') && (
+                                      <img src={optimizeAvatarUrl(user.avatar)} alt={user.username} className="w-full h-full object-cover" style={{ position: 'absolute', top: 0, left: 0 }} onError={(e) => { e.target.style.display = 'none'; }} />
+                                    )}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-semibold truncate flex items-center gap-1" style={{ color: 'var(--text)' }}>
+                                      {renderUsername(user.username)}
+                                    </p>
+                                    <p className="text-[9px]" style={{ color: user.status === 'online' ? 'var(--online)' : 'var(--text-subtle)' }}>
+                                      {user.status || 'offline'}
+                                    </p>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    // Add to sending set
+                                    setSendingRequestIds(prev => {
+                                      const next = new Set(prev);
+                                      next.add(user.id);
+                                      return next;
+                                    });
+                                    
+                                    const token = localStorage.getItem('chapp_token');
+                                    try {
+                                      const response = await fetch(`${BACKEND_URL}/api/friends/request`, {
+                                        method: 'POST',
+                                        headers: {
+                                          'Content-Type': 'application/json',
+                                          'Authorization': `Bearer ${token}`
+                                        },
+                                        body: JSON.stringify({ username: user.username })
+                                      });
+                                      const data = await response.json();
+                                      if (!response.ok) throw new Error(data.error || 'Failed to send request');
+                                      
+                                      setFriendRequestMessage({ text: data.message || 'Request sent!', type: 'success' });
+                                      confetti({
+                                        particleCount: 40,
+                                        spread: 20,
+                                        origin: { y: 0.8 }
+                                      });
+                                      
+                                      // Remove from suggestions list
+                                      setSearchSuggestions(prev => prev.filter(item => item.id !== user.id));
+                                      setNewFriendUsername('');
+                                      refreshFriendsAndRequests(token);
+                                    } catch (err) {
+                                      setFriendRequestMessage({ text: err.message, type: 'error' });
+                                    } finally {
+                                      setSendingRequestIds(prev => {
+                                        const next = new Set(prev);
+                                        next.delete(user.id);
+                                        return next;
+                                      });
+                                    }
+                                  }}
+                                  disabled={isAdding}
+                                  className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-white transition-opacity shrink-0 hover:opacity-90 active:scale-95 border-none cursor-pointer flex items-center justify-center min-w-[50px]"
+                                  style={{ background: 'var(--primary)', height: '26px' }}
+                                >
+                                  {isAdding ? (
+                                    <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                  ) : 'Add'}
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
                 <button
                   type="submit"
                   className="px-3 rounded-xl text-white font-semibold text-xs shrink-0 flex items-center gap-1.5 justify-center transition-opacity hover:opacity-90 active:scale-95"
@@ -1757,6 +1878,95 @@ export default function ChatPage() {
                   )}
                 </div>
               </div>
+
+              {/* Recovery Email Card */}
+              <div className="px-4 py-2">
+                <div className="p-4 rounded-2xl shadow-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-light)' }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] uppercase font-bold tracking-wider" style={{ color: 'var(--text-muted)' }}>Recovery Email</span>
+                    {!isEditingEmail ? (
+                      <button
+                        onClick={() => { setEditEmailVal(currentUser?.email || ''); setIsEditingEmail(true); setEmailEditError(''); }}
+                        className="text-[10px] font-bold transition-all border-none bg-transparent cursor-pointer"
+                        style={{ color: 'var(--primary)' }}
+                      >
+                        {currentUser?.email ? 'Change' : 'Set Email'}
+                      </button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => { setIsEditingEmail(false); setEmailEditError(''); }}
+                          className="text-[10px] font-bold text-slate-400 border-none bg-transparent cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={async () => {
+                            const token = localStorage.getItem('chapp_token');
+                            if (!token) return;
+                            
+                            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                            if (editEmailVal.trim() && !emailRegex.test(editEmailVal.trim().toLowerCase())) {
+                              setEmailEditError('Invalid email format.');
+                              return;
+                            }
+                            
+                            try {
+                              const response = await fetch(`${BACKEND_URL}/api/users/profile`, {
+                                method: 'PUT',
+                                headers: {
+                                  'Content-Type': 'application/json',
+                                  'Authorization': `Bearer ${token}`
+                                },
+                                body: JSON.stringify({ email: editEmailVal.trim() || null })
+                              });
+                              
+                              const data = await response.json();
+                              if (!response.ok) throw new Error(data.error || 'Failed to update email.');
+                              
+                              setCurrentUser(data);
+                              localStorage.setItem('chapp_user', JSON.stringify(data));
+                              setIsEditingEmail(false);
+                              setEmailEditError('');
+                              confetti({
+                                particleCount: 30,
+                                spread: 20,
+                                origin: { y: 0.8 }
+                              });
+                            } catch (err) {
+                              setEmailEditError(err.message);
+                            }
+                          }}
+                          className="text-[10px] font-bold border-none bg-transparent cursor-pointer"
+                          style={{ color: 'var(--primary)' }}
+                        >
+                          Save
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {emailEditError && (
+                    <p className="text-[10px] mb-2 font-semibold text-red-500">{emailEditError}</p>
+                  )}
+                  
+                  {!isEditingEmail ? (
+                    <p className="text-xs font-mono" style={{ color: currentUser?.email ? 'var(--text)' : 'var(--text-subtle)' }}>
+                      {currentUser?.email || 'No recovery email set.'}
+                    </p>
+                  ) : (
+                    <input
+                      type="email"
+                      placeholder="Enter recovery email (e.g. gmail)"
+                      value={editEmailVal}
+                      onChange={e => setEditEmailVal(e.target.value)}
+                      className="field-input py-1.5 px-3 text-xs"
+                      style={{ background: 'var(--surface)' }}
+                    />
+                  )}
+                </div>
+              </div>
+
               {/* Log Out */}
               <div className="px-4 py-3">
                 <button
@@ -2870,81 +3080,6 @@ export default function ChatPage() {
                 </>
               )}
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ═══════════════════════════════════════
-          RECOVERY EMAIL PROMPT MODAL FOR EXISTING ACCOUNTS
-          ═══════════════════════════════════════ */}
-      {showEmailPrompt && (
-        <div className="modal-overlay animate-fade-in" style={{ zIndex: 110 }}>
-          <div className="modal-card slide-up w-full max-w-[400px] p-8" style={{ background: 'var(--surface)', border: '1px solid var(--border-light)' }}>
-            <div className="flex flex-col items-center mb-6">
-              <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3" style={{ background: 'var(--primary-light)' }}>
-                <Mail className="w-6 h-6" style={{ color: 'var(--primary)' }} />
-              </div>
-              <h3 className="text-lg font-bold text-center mb-1" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>
-                Secure Your Account
-              </h3>
-              <p className="text-xs text-center px-2" style={{ color: 'var(--text-muted)' }}>
-                Set a recovery email address so you can reset your password if you ever get locked out.
-              </p>
-            </div>
-
-            {emailPromptError && (
-              <div className="mb-4 flex items-center gap-2.5 px-4 py-3 rounded-xl text-xs slide-up"
-                style={{ background: '#fce8e6', color: '#c5221f', border: '1px solid #f28b82' }}>
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{emailPromptError}</span>
-              </div>
-            )}
-
-            {emailPromptSuccess && (
-              <div className="mb-4 flex items-center gap-2.5 px-4 py-3 rounded-xl text-xs slide-up"
-                style={{ background: '#e6f4ea', color: '#137333', border: '1px solid #a8dab5' }}>
-                <Check className="w-4 h-4 shrink-0" />
-                <span>Recovery email saved successfully!</span>
-              </div>
-            )}
-
-            <form onSubmit={handleSavePromptEmail} className="flex flex-col gap-4">
-              <div>
-                <label className="label-text">Recovery Email</label>
-                <input
-                  type="email"
-                  placeholder="Enter recovery email (e.g. gmail)"
-                  value={promptEmail}
-                  onChange={e => setPromptEmail(e.target.value)}
-                  className="field-input"
-                  required
-                  disabled={emailPromptLoading || emailPromptSuccess}
-                />
-              </div>
-
-              <div className="flex gap-3 mt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowEmailPrompt(false)}
-                  className="btn-ghost flex-1 py-2 text-xs font-semibold"
-                  disabled={emailPromptLoading || emailPromptSuccess}
-                >
-                  Remind Me Later
-                </button>
-                <button
-                  type="submit"
-                  className="btn-blue flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-2"
-                  disabled={emailPromptLoading || emailPromptSuccess}
-                >
-                  {emailPromptLoading ? (
-                    <>
-                      <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                      Saving...
-                    </>
-                  ) : 'Save Email'}
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
