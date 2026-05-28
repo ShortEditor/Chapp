@@ -47,7 +47,10 @@ import {
   Mail,
   AlertCircle,
   SquarePen,
-  Reply
+  Reply,
+  Upload,
+  Music,
+  VolumeX
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { encryptData, decryptData } from '@/lib/crypto';
