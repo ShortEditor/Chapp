@@ -87,6 +87,13 @@ flowchart TD
 - **Typing indicators** — live typing status (1:1 conversations)
 - **Message unsend** — delete for both sides in real-time
 
+### 📸 Stories & Snaps
+- **Horizontal Stories Bar** — Dynamic, circular story view matching premium design layouts with custom dashed containers for unposted self-stories, and glowing hot-pink gradients (`bg-gradient-to-tr from-[#7c3aed] to-[#FF4081]`) for active friend stories.
+- **Self-Destructing Snaps** — View-once private media attachments that completely purge from the sender, receiver, and server upon closing (10s viewing limit).
+- **24-Hour Snap Auto-Expiration** — Background cleanup engine that automatically deletes and self-destructs unopened Snaps older than 24 hours to preserve complete offline privacy.
+- **Premium Snaps UI** — Breathtaking chat-bubble designs featuring neon-pink pulsing rings, glassmorphic backgrounds, animated camera icons, and custom status tracking.
+- **Snap Screen Camera Overlay** — Ultra-modern full-screen dark camera card modal featuring real-time image filters (Original, Noir, Vintage), active camera flip mechanics, elegant double-ring shutter action, and authorization guides.
+
 ### 👥 Group Messaging
 - **Group Chats** — create multi-member groups with a description and optional avatar
 - **Realtime Fan-out** — socket server broadcasts messages and emoji reactions to all online group members
