@@ -41,6 +41,7 @@ export function SocketProvider({ children }) {
   const [isConnected, setIsConnected] = useState(false);
   const [typingFriends, setTypingFriends] = useState(new Set());
   const [onlineFriends, setOnlineFriends] = useState(new Map());
+  const [groups, setGroups] = useState([]);
 
   // Use a ref for the socket so callbacks always access the latest instance
   // without stale closure bugs from useState
@@ -569,6 +570,42 @@ export function SocketProvider({ children }) {
     }
   }, [getSharedKey]);
 
+  const fetchGroups = useCallback(async (token) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/groups`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setGroups(data);
+        // Sync to IndexedDB groups table
+        await db.groups.clear();
+        for (const gp of data) {
+          await db.groups.put({
+            id: gp.id,
+            name: gp.name,
+            avatar: gp.avatar || null,
+            description: gp.description || null,
+            createdById: gp.createdById
+          });
+          // Insert group into chats so it shows in sidebar
+          const existing = await db.chats.get(gp.id);
+          if (!existing) {
+            await db.chats.put({
+              friendId: gp.id,
+              lastMessageText: 'Group created',
+              lastMessageTime: gp.createdAt ? new Date(gp.createdAt).getTime() : Date.now(),
+              unreadCount: 0,
+              isGroup: true
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error('❌ [Groups] Fetch error:', err);
+    }
+  }, []);
+
   const connectSocket = useCallback((token) => {
     // Don't reconnect if already connected
     if (socketRef.current && socketRef.current.connected) {
@@ -601,6 +638,7 @@ export function SocketProvider({ children }) {
       const currentUser = JSON.parse(localStorage.getItem('chapp_user') || '{}');
       if (currentUser.id) {
         initializeE2EEKeys(currentUser.id, token);
+        fetchGroups(token);
       }
 
       flushOfflineMessages(newSocket);
@@ -621,12 +659,12 @@ export function SocketProvider({ children }) {
     });
     // RECEIVE REALTIME MESSAGE
     newSocket.on('receive-message', async (message) => {
-      const { id, senderId, receiverId, text, mediaUrl, mediaType, timestamp, isEncrypted } = message;
+      const { id, senderId, receiverId, chatId, text, mediaUrl, mediaType, timestamp, isEncrypted, isGroup } = message;
       try {
         let decryptedText = text || '';
         let decryptedMediaUrl = mediaUrl || null;
 
-        if (isEncrypted) {
+        if (isEncrypted && !isGroup) {
           const sharedKey = await getSharedKey(senderId);
           if (sharedKey) {
             try {
@@ -646,24 +684,31 @@ export function SocketProvider({ children }) {
           }
         }
 
+        const targetChatId = isGroup ? chatId : senderId;
+
         await db.messages.put({
-          id, chatId: senderId, senderId, receiverId,
+          id, chatId: targetChatId, senderId, receiverId,
+          senderUsername: message.senderUsername || null,
           text: decryptedText, mediaUrl: decryptedMediaUrl, mediaType, timestamp, status: 'ack',
           replyTo: message.replyTo || null,
-          reactions: {}
+          reactions: {},
+          isGroup: !!isGroup
         });
 
-        const isActiveChat = activeChatRef.current === senderId;
-        const existingChat = await db.chats.get(senderId);
+        const isActiveChat = activeChatRef.current === targetChatId;
+        const existingChat = await db.chats.get(targetChatId);
 
         await db.chats.put({
-          friendId: senderId,
-          lastMessageText: decryptedText || (mediaType === 'image' ? '📷 Photo' : mediaType === 'video' ? '🎥 Video' : '📁 File'),
+          friendId: targetChatId,
+          lastMessageText: (isGroup ? `${message.senderUsername || 'Member'}: ` : '') + (decryptedText || (mediaType === 'image' ? '📷 Photo' : mediaType === 'video' ? '🎥 Video' : '📁 File')),
           lastMessageTime: timestamp,
-          unreadCount: isActiveChat ? 0 : (existingChat?.unreadCount || 0) + 1
+          unreadCount: isActiveChat ? 0 : (existingChat?.unreadCount || 0) + 1,
+          isGroup: !!isGroup
         });
 
-        newSocket.emit('message-ack', { id, senderId });
+        if (!isGroup) {
+          newSocket.emit('message-ack', { id, senderId });
+        }
       } catch (err) {
         console.error('❌ [SocketContext] Error writing message to DB:', err);
       }
@@ -674,12 +719,12 @@ export function SocketProvider({ children }) {
       const ackIds = [];
       try {
         for (const msg of messages) {
-          const { id, senderId, receiverId, text, mediaUrl, mediaType, timestamp, isEncrypted } = msg;
+          const { id, senderId, receiverId, chatId, text, mediaUrl, mediaType, timestamp, isEncrypted, isGroup } = msg;
           
           let decryptedText = text || '';
           let decryptedMediaUrl = mediaUrl || null;
 
-          if (isEncrypted) {
+          if (isEncrypted && !isGroup) {
             const sharedKey = await getSharedKey(senderId);
             if (sharedKey) {
               try {
@@ -699,22 +744,29 @@ export function SocketProvider({ children }) {
             }
           }
 
+          const targetChatId = isGroup ? chatId : senderId;
+
           await db.messages.put({
-            id, chatId: senderId, senderId, receiverId,
+            id, chatId: targetChatId, senderId, receiverId,
+            senderUsername: msg.senderUsername || null,
             text: decryptedText, mediaUrl: decryptedMediaUrl, mediaType, timestamp, status: 'ack',
             replyTo: msg.replyTo || null,
-            reactions: {}
+            reactions: {},
+            isGroup: !!isGroup
           });
 
-          const isActiveChat = activeChatRef.current === senderId;
-          const existingChat = await db.chats.get(senderId);
+          const isActiveChat = activeChatRef.current === targetChatId;
+          const existingChat = await db.chats.get(targetChatId);
           await db.chats.put({
-            friendId: senderId,
-            lastMessageText: decryptedText || (mediaType === 'image' ? '📷 Photo' : mediaType === 'video' ? '🎥 Video' : '📁 File'),
+            friendId: targetChatId,
+            lastMessageText: (isGroup ? `${msg.senderUsername || 'Member'}: ` : '') + (decryptedText || (mediaType === 'image' ? '📷 Photo' : mediaType === 'video' ? '🎥 Video' : '📁 File')),
             lastMessageTime: timestamp,
-            unreadCount: isActiveChat ? 0 : (existingChat?.unreadCount || 0) + 1
+            unreadCount: isActiveChat ? 0 : (existingChat?.unreadCount || 0) + 1,
+            isGroup: !!isGroup
           });
-          ackIds.push({ id, senderId });
+          if (!isGroup) {
+            ackIds.push({ id, senderId });
+          }
         }
 
         if (ackIds.length > 0) {
@@ -1036,6 +1088,82 @@ export function SocketProvider({ children }) {
     }
   }, []);
 
+  const sendGroupMessage = useCallback(async (groupId, text, mediaUrl = null, mediaType = null, replyTo = null) => {
+    const activeSocket = socketRef.current;
+    const isOnline = activeSocket && activeSocket.connected;
+
+    const messageId = generateUUID();
+    const timestamp = Date.now();
+    const currentUser = JSON.parse(localStorage.getItem('chapp_user') || '{}');
+
+    const localMessage = {
+      id: messageId,
+      chatId: groupId,
+      senderId: currentUser.id,
+      senderUsername: currentUser.username,
+      receiverId: groupId,
+      text: text || '',
+      mediaUrl,
+      mediaType,
+      timestamp,
+      status: isOnline ? 'delivered' : 'sending',
+      replyTo: replyTo || null,
+      reactions: {},
+      isGroup: true
+    };
+
+    try {
+      await db.messages.put(localMessage);
+      await db.chats.put({
+        friendId: groupId,
+        lastMessageText: `${currentUser.username}: ` + (text || (mediaType === 'image' ? '📷 Photo' : mediaType === 'video' ? '🎥 Video' : '📁 File')),
+        lastMessageTime: timestamp,
+        unreadCount: 0,
+        isGroup: true
+      });
+
+      if (isOnline) {
+        activeSocket.emit('send-group-message', {
+          id: messageId,
+          groupId,
+          text,
+          mediaUrl,
+          mediaType,
+          timestamp,
+          replyTo: replyTo || null
+        });
+      }
+      return localMessage;
+    } catch (err) {
+      console.error('❌ [SocketContext] sendGroupMessage error:', err);
+      return null;
+    }
+  }, []);
+
+  const sendGroupReaction = useCallback(async (groupId, messageId, emoji) => {
+    const currentUser = JSON.parse(localStorage.getItem('chapp_user') || '{}');
+    if (!currentUser.id || !messageId || !emoji) return;
+    try {
+      const msg = await db.messages.get(messageId);
+      if (msg) {
+        const reactions = { ...(msg.reactions || {}) };
+        const users = reactions[emoji] ? [...reactions[emoji]] : [];
+        if (users.includes(currentUser.id)) {
+          reactions[emoji] = users.filter(u => u !== currentUser.id);
+          if (reactions[emoji].length === 0) delete reactions[emoji];
+        } else {
+          reactions[emoji] = [...users, currentUser.id];
+        }
+        await db.messages.update(messageId, { reactions });
+      }
+    } catch (err) { console.error('Group reaction local update error:', err); }
+
+    const activeSocket = socketRef.current;
+    if (activeSocket && activeSocket.connected) {
+      activeSocket.emit('send-group-reaction', { messageId, groupId, emoji });
+    }
+  }, []);
+
   return (
     <SocketContext.Provider
       value={{
@@ -1052,6 +1180,10 @@ export function SocketProvider({ children }) {
         emitTyping,
         setActiveChat,
         socketRef,
+        groups,
+        fetchGroups,
+        sendGroupMessage,
+        sendGroupReaction,
         callState,
         callPartner,
         isMuted,

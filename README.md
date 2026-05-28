@@ -26,8 +26,8 @@ flowchart TD
         H[Hourly Media Purge]
     end
 
-    M -- REST: Auth / Profile --> Server
-    D -- WebSocket: Send Message --> E
+    M -- REST: Auth / Profile / Groups --> Server
+    D -- WebSocket: Send Message / Reactions --> E
     E -- Relay Online --> D
     E -- Buffer Offline (7d TTL) --> F
     F -- Deliver on Login --> D
@@ -77,15 +77,22 @@ flowchart TD
 ## Features
 
 ### 💬 Messaging
-- **End-to-End Encrypted (E2EE)** — ECDH key exchange + AES-GCM per conversation
+- **End-to-End Encrypted (E2EE)** — ECDH key exchange + AES-GCM per 1:1 conversation
 - **Local-first storage** — messages live in IndexedDB, never persisted on server
 - **Offline message queue** — messages buffered in Redis, delivered on reconnect (7-day TTL)
 - **Read receipts** — single tick (sent) → single tick (delivered) → double tick (read)
 - **Media sharing** — images, videos, files via Cloudinary (auto-purged after 1 hour)
 - **WhatsApp-style reply** — swipe right on any message to reply with quoted preview
-- **Emoji reactions** — 8 emoji reactions per message, real-time sync to other user
-- **Typing indicators** — live typing status
+- **Emoji reactions** — 8 emoji reactions per message, real-time sync to other users
+- **Typing indicators** — live typing status (1:1 conversations)
 - **Message unsend** — delete for both sides in real-time
+
+### 👥 Group Messaging
+- **Group Chats** — create multi-member groups with a description and optional avatar
+- **Realtime Fan-out** — socket server broadcasts messages and emoji reactions to all online group members
+- **Offline Buffer Queues** — group messages for offline members are placed into their individual Redis queues and synchronized instantly upon reconnecting
+- **Admin Control Panel** — group creators are designated admins who can add new friends, remove members, or delete the group
+- **Leave / Delete Group** — users can leave any group, and admins can fully dissolve groups
 
 ### 👤 Profiles
 - **Avatar upload** — via Cloudinary
@@ -104,6 +111,7 @@ flowchart TD
 - **Zero knowledge backup** — chats encrypted client-side (PBKDF2 + AES-GCM + deflate compression) before upload; server stores only ciphertext
 - **No plaintext on server** — ever
 - **Password-protected restore** — passphrase never leaves the device
+- **WebRTC Signaling Friend Checks** — WebRTC connection attempts require friendship validation to prevent signaling attacks from non-friends
 
 ### 📱 Mobile
 - **PWA installable** — "Add to Home Screen" for app-like experience
@@ -125,7 +133,7 @@ chapp/
 ├── client/                  # Next.js 16 frontend (Vercel)
 │   ├── src/
 │   │   ├── app/
-│   │   │   ├── chat/        # Main chat page (~4000 lines, core UI)
+│   │   │   ├── chat/        # Main chat page (~4200 lines, core UI)
 │   │   │   ├── login/
 │   │   │   ├── signup/
 │   │   │   └── forgot-password/
@@ -138,7 +146,7 @@ chapp/
 │
 └── server/                  # Express + Socket.io backend (Render)
     ├── src/
-    │   └── server.js        # All REST + Socket.io handlers (~1400 lines)
+    │   └── server.js        # All REST + Socket.io handlers (~1600 lines)
     └── prisma/
         └── schema.prisma    # PostgreSQL schema
 ```
@@ -163,6 +171,7 @@ model User {
   backupData       String?  // Encrypted backup ciphertext
   createdAt        DateTime @default(now())
   friendships      Friendship[]
+  groupMemberships GroupMember[]
 }
 
 model Friendship {
@@ -173,6 +182,28 @@ model Friendship {
   createdAt  DateTime @default(now())
   user       User     @relation(...)
 }
+
+model Group {
+  id          String        @id @default(uuid())
+  name        String
+  description String?
+  avatar      String?
+  createdById String
+  createdAt   DateTime      @default(now())
+  members     GroupMember[]
+}
+
+model GroupMember {
+  id       String   @id @default(uuid())
+  groupId  String
+  userId   String
+  role     String   // "admin" | "member"
+  joinedAt DateTime @default(now())
+  group    Group    @relation(fields: [groupId], onDelete: Cascade)
+  user     User     @relation(fields: [userId], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+}
 ```
 
 ---
@@ -182,7 +213,7 @@ model Friendship {
 ### Prerequisites
 - Node.js 18+
 - A Supabase project (PostgreSQL)
-- An Upstash Redis database
+- A Upstash Redis database
 - A Cloudinary account
 - A Render account (or any Node host)
 
@@ -202,7 +233,8 @@ CLOUDINARY_API_SECRET=...
 VAPID_PUBLIC_KEY=...
 VAPID_PRIVATE_KEY=...
 
-npx prisma migrate deploy
+npx prisma generate
+npx prisma db push
 npm start
 ```
 

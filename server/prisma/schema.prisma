@@ -32,6 +32,8 @@ model User {
   // Relationships
   sentRequests     Friendship[] @relation("SentFriendships")
   receivedRequests Friendship[] @relation("ReceivedFriendships")
+  groupsCreated    Group[]      @relation("GroupsCreated")
+  groupMemberships GroupMember[]
 }
 
 model Friendship {
@@ -45,4 +47,29 @@ model Friendship {
   receiver User @relation("ReceivedFriendships", fields: [receiverId], references: [id], onDelete: Cascade)
 
   @@unique([senderId, receiverId])
+}
+
+model Group {
+  id          String   @id @default(uuid())
+  name        String
+  avatar      String?
+  description String?
+  createdById String
+  createdAt   DateTime @default(now())
+
+  createdBy User          @relation("GroupsCreated", fields: [createdById], references: [id])
+  members   GroupMember[]
+}
+
+model GroupMember {
+  id       String   @id @default(uuid())
+  groupId  String
+  userId   String
+  role     String   @default("member") // "admin" | "member"
+  joinedAt DateTime @default(now())
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
 }

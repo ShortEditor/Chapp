@@ -249,6 +249,10 @@ export default function ChatPage() {
     sendReaction,
     emitTyping,
     setActiveChat,
+    groups,
+    fetchGroups,
+    sendGroupMessage,
+    sendGroupReaction,
     callState,
     callPartner,
     isMuted,
@@ -271,6 +275,14 @@ export default function ChatPage() {
   const [activeFriend, setActiveFriend] = useState(null);
   const [viewingUser, setViewingUser] = useState(null);
   const [viewingUserAdding, setViewingUserAdding] = useState(false);
+
+  // Group States
+  const [activeGroupDetails, setActiveGroupDetails] = useState(null);
+  const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupDesc, setNewGroupDesc] = useState('');
+  const [newGroupMembers, setNewGroupMembers] = useState([]);
+  const [isCreatingGroup, setIsCreatingGroup] = useState(false);
 
   const [newFriendUsername, setNewFriendUsername] = useState('');
   const [friendRequestMessage, setFriendRequestMessage] = useState({ text: '', type: '' });
@@ -349,10 +361,15 @@ export default function ChatPage() {
     () => db.friends.toArray()
   ) || [];
 
+  const dbGroups = useLiveQuery(
+    () => db.groups.toArray()
+  ) || [];
+
   const messages = useLiveQuery(
     () => activeFriend ? db.messages.where('chatId').equals(activeFriend.id).sortBy('timestamp') : Promise.resolve([]),
     [activeFriend]
   ) || [];
+
 
   // -------------------------------------------------------------
   // INITIALIZATION & SYNC EFFECTS
@@ -1401,13 +1418,25 @@ export default function ChatPage() {
     if (!text.trim() && !pendingMedia) return false;
 
     setSendError('');
-    const result = await sendMessage(
-      activeFriend.id,
-      text.trim(),
-      pendingMedia?.url || null,
-      pendingMedia?.type || null,
-      replyingTo ? { id: replyingTo.id, text: replyingTo.text, senderId: replyingTo.senderId } : null
-    );
+    let result = null;
+
+    if (activeFriend.isGroup) {
+      result = await sendGroupMessage(
+        activeFriend.id,
+        text.trim(),
+        pendingMedia?.url || null,
+        pendingMedia?.type || null,
+        replyingTo ? { id: replyingTo.id, text: replyingTo.text, senderId: replyingTo.senderId } : null
+      );
+    } else {
+      result = await sendMessage(
+        activeFriend.id,
+        text.trim(),
+        pendingMedia?.url || null,
+        pendingMedia?.type || null,
+        replyingTo ? { id: replyingTo.id, text: replyingTo.text, senderId: replyingTo.senderId } : null
+      );
+    }
 
     if (!result) {
       setSendError('Failed to save message. IndexedDB may be full.');
@@ -1417,9 +1446,74 @@ export default function ChatPage() {
 
     setPendingMedia(null);
     setReplyingTo(null);
-    emitTyping(activeFriend.id, false);
+    if (!activeFriend.isGroup) {
+      emitTyping(activeFriend.id, false);
+    }
     return true;
   };
+
+  // Group Details Loader
+  useEffect(() => {
+    if (activeFriend && activeFriend.isGroup) {
+      const token = localStorage.getItem('chapp_token');
+      if (token) {
+        fetch(`${BACKEND_URL}/api/groups/${activeFriend.id}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+          .then(res => {
+            if (res.ok) return res.json();
+            throw new Error('Failed to fetch group details');
+          })
+          .then(data => {
+            setActiveGroupDetails(data);
+          })
+          .catch(err => console.error('Error fetching group details:', err));
+      }
+    } else {
+      setActiveGroupDetails(null);
+    }
+  }, [activeFriend]);
+
+  // Group Creation Form Submission Handler
+  const handleCreateGroup = async (e) => {
+    e.preventDefault();
+    if (!newGroupName.trim()) return;
+    setIsCreatingGroup(true);
+    try {
+      const token = localStorage.getItem('chapp_token');
+      const res = await fetch(`${BACKEND_URL}/api/groups`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: newGroupName.trim(),
+          description: newGroupDesc.trim(),
+          memberIds: newGroupMembers
+        })
+      });
+      if (res.ok) {
+        const group = await res.json();
+        // Clear input form fields
+        setNewGroupName('');
+        setNewGroupDesc('');
+        setNewGroupMembers([]);
+        setIsCreateGroupOpen(false);
+        // Reload all groups to local state & database
+        if (token) fetchGroups(token);
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to create group');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to create group');
+    } finally {
+      setIsCreatingGroup(false);
+    }
+  };
+
 
   const handleLogout = () => {
     disconnectSocket();
@@ -1458,12 +1552,19 @@ export default function ChatPage() {
   const avatarColors = ['#4a90d9','#e67e22','#27ae60','#9b59b6','#e74c3c','#1abc9c','#f39c12','#2980b9'];
   const getAvatarColor = (name) => avatarColors[(name?.charCodeAt(0) || 0) % avatarColors.length];
   const filteredChats = dbChats.filter(chat => {
-    const friend = dbFriends.find(f => f.id === chat.friendId);
-    const friendName = friend?.username || 'Unknown';
+    let chatName = 'Unknown';
+    if (chat.isGroup) {
+      const grp = dbGroups.find(g => g.id === chat.friendId);
+      chatName = grp?.name || 'Group Chat';
+    } else {
+      const friend = dbFriends.find(f => f.id === chat.friendId);
+      chatName = friend?.username || 'Unknown';
+    }
     const lastMsg = chat.lastMessageText || '';
-    return friendName.toLowerCase().includes(chatSearchQuery.toLowerCase()) || 
+    return chatName.toLowerCase().includes(chatSearchQuery.toLowerCase()) || 
            lastMsg.toLowerCase().includes(chatSearchQuery.toLowerCase());
   });
+
 
   // Derived suggestions
   const mutualSuggestions = suggestions.filter(s => s && s.mutualFriends && s.mutualFriends.length > 0);
@@ -1508,6 +1609,16 @@ export default function ChatPage() {
           </div>
           <div className="flex items-center gap-1.5">
             <button
+              onClick={() => { setIsCreateGroupOpen(true); }}
+              className="p-2 rounded-full transition-colors"
+              style={{ color: 'var(--text-muted)' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--border-light)'; e.currentTarget.style.color = 'var(--primary)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+              title="New Group"
+            >
+              <Users className="w-5 h-5" />
+            </button>
+            <button
               onClick={() => { setActiveTab('friends'); }}
               className="p-2 rounded-full transition-colors"
               style={{ color: 'var(--text-muted)' }}
@@ -1517,6 +1628,7 @@ export default function ChatPage() {
             >
               <SquarePen className="w-5 h-5" />
             </button>
+
             {activeTab !== 'chats' && (
               <button
                 onClick={handleLogout}
@@ -1599,25 +1711,45 @@ export default function ChatPage() {
               ) : (
                 <div className="space-y-0.5">
                   {filteredChats.map(chat => {
-                    const friend = dbFriends.find(f => f.id === chat.friendId);
-                    const isOnline = onlineFriends.get(chat.friendId) === 'online';
-                    const isTyping = typingFriends.has(chat.friendId);
+                    const isGroup = chat.isGroup;
+                    let displayName = 'Unknown';
+                    let avatarInitial = 'G';
+                    let avatarUrl = null;
+                    let chatObj = null;
+
+                    if (isGroup) {
+                      const grp = dbGroups.find(g => g.id === chat.friendId);
+                      displayName = grp?.name || 'Group Chat';
+                      avatarInitial = displayName.slice(0, 2);
+                      avatarUrl = grp?.avatar || null;
+                      chatObj = { id: chat.friendId, username: displayName, avatar: avatarUrl, isGroup: true, description: grp?.description };
+                    } else {
+                      const friend = dbFriends.find(f => f.id === chat.friendId);
+                      displayName = friend?.username || 'Chapp User';
+                      avatarInitial = displayName.slice(0, 2);
+                      avatarUrl = friend?.avatar || null;
+                      chatObj = friend || { id: chat.friendId, username: displayName, avatar: avatarUrl };
+                    }
+
+                    const isOnline = !isGroup && onlineFriends.get(chat.friendId) === 'online';
+                    const isTyping = !isGroup && typingFriends.has(chat.friendId);
                     const isActive = activeFriend?.id === chat.friendId;
+
                     return (
                       <div
                         key={chat.friendId}
-                        onClick={() => setActiveFriend(friend || { id: chat.friendId, username: 'Unknown' })}
+                        onClick={() => setActiveFriend(chatObj)}
                         className={`conv-item ${isActive ? 'active' : ''}`}
                         style={{ borderRadius: '12px' }}
                       >
                         <div className="relative shrink-0">
                           <div
                             className="avatar w-12 h-12 text-sm"
-                            style={{ background: getAvatarColor(friend?.username) }}
+                            style={{ background: isGroup ? 'var(--primary)' : getAvatarColor(displayName) }}
                           >
-                            {friend?.username?.slice(0, 2)}
-                            {friend?.avatar?.startsWith('http') && (
-                              <img src={optimizeAvatarUrl(friend.avatar)} alt={friend.username} className="w-full h-full object-cover" style={{ position: 'absolute', top: 0, left: 0 }} onError={(e) => { e.target.style.display = 'none'; }} />
+                            {avatarInitial}
+                            {avatarUrl?.startsWith('http') && (
+                              <img src={optimizeAvatarUrl(avatarUrl)} alt={displayName} className="w-full h-full object-cover" style={{ position: 'absolute', top: 0, left: 0 }} onError={(e) => { e.target.style.display = 'none'; }} />
                             )}
                           </div>
                           {isOnline && (
@@ -1627,7 +1759,8 @@ export default function ChatPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
                             <span className="text-sm font-semibold truncate flex items-center gap-1" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>
-                              {renderUsername(friend?.username || 'Chapp User')}
+                              {isGroup && <Users className="w-3.5 height-3.5 text-primary shrink-0" style={{ display: 'inline' }} />}
+                              {renderUsername(displayName)}
                             </span>
                             <span className="text-[10px] shrink-0 ml-2" style={{ color: 'var(--text-subtle)' }}>
                               {formatTime(chat.lastMessageTime)}
@@ -1650,6 +1783,7 @@ export default function ChatPage() {
                       </div>
                     );
                   })}
+
                 </div>
               )}
             </div>
@@ -2553,23 +2687,26 @@ export default function ChatPage() {
                 </button>
 
                 <div className="relative shrink-0" style={{ cursor: 'pointer' }} onClick={() => setViewingUser(activeFriend)}>
-                  <div className="avatar w-10 h-10 text-sm relative" style={{ background: getAvatarColor(activeFriend.username) }}>
+                  <div className="avatar w-10 h-10 text-sm relative" style={{ background: activeFriend.isGroup ? 'var(--primary)' : getAvatarColor(activeFriend.username) }}>
                     {activeFriend.username.slice(0, 2)}
                     {activeFriend.avatar?.startsWith('http') && (
                       <img src={optimizeAvatarUrl(activeFriend.avatar)} alt={activeFriend.username} className="w-full h-full object-cover" style={{ position: 'absolute', top: 0, left: 0 }} onError={(e) => { e.target.style.display = 'none'; }} />
                     )}
                   </div>
-                  {onlineFriends.get(activeFriend.id) === 'online' && (
+                  {!activeFriend.isGroup && onlineFriends.get(activeFriend.id) === 'online' && (
                     <span className="status-dot status-online" style={{ borderColor: 'var(--surface)' }} />
                   )}
                 </div>
 
                 <div style={{ cursor: 'pointer' }} onClick={() => setViewingUser(activeFriend)}>
                   <h3 className="text-sm font-bold truncate flex items-center gap-1" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>
+                    {activeFriend.isGroup && <Users className="w-3.5 h-3.5 text-primary shrink-0" style={{ display: 'inline' }} />}
                     {renderUsername(activeFriend.username)}
                   </h3>
                   <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                    {typingFriends.has(activeFriend.id) ? (
+                    {activeFriend.isGroup ? (
+                      activeGroupDetails ? `${activeGroupDetails.members.length} members` : 'Group Chat'
+                    ) : typingFriends.has(activeFriend.id) ? (
                       <span className="flex items-center gap-1" style={{ color: 'var(--primary)' }}>
                         <span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" />
                         <span className="ml-1">typing</span>
@@ -2581,27 +2718,43 @@ export default function ChatPage() {
                 </div>
               </div>
 
-              {/* Call Trigger Button */}
-              <button
-                onClick={() => {
-                  const isOnline = onlineFriends.get(activeFriend.id) === 'online';
-                  if (isOnline) {
-                    initiateCall(activeFriend.id, activeFriend.username);
-                  } else {
-                    alert(`${activeFriend.username} is currently offline. You can only call friends who are active and online!`);
-                  }
-                }}
-                className="p-2.5 rounded-full transition-all hover:scale-105 active:scale-95 cursor-pointer shrink-0 flex items-center justify-center"
-                style={{ 
-                  background: onlineFriends.get(activeFriend.id) === 'online' ? 'var(--primary-light)' : 'var(--border-light)', 
-                  color: onlineFriends.get(activeFriend.id) === 'online' ? 'var(--primary)' : 'var(--text-subtle)',
-                  border: `1px solid ${onlineFriends.get(activeFriend.id) === 'online' ? 'var(--primary-container)' : 'var(--border)'}`,
-                  opacity: onlineFriends.get(activeFriend.id) === 'online' ? 1 : 0.7
-                }}
-                title={onlineFriends.get(activeFriend.id) === 'online' ? "Start Voice Call" : `${activeFriend.username} is offline`}
-              >
-                <Phone className="w-4 h-4" />
-              </button>
+              {/* Action Button */}
+              {activeFriend.isGroup ? (
+                <button
+                  onClick={() => setViewingUser(activeFriend)}
+                  className="p-2.5 rounded-full transition-all hover:scale-105 active:scale-95 cursor-pointer shrink-0 flex items-center justify-center"
+                  style={{ 
+                    background: 'var(--border-light)', 
+                    color: 'var(--text-subtle)',
+                    border: '1px solid var(--border)',
+                  }}
+                  title="Group Info"
+                >
+                  <Info className="w-4 h-4" />
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    const isOnline = onlineFriends.get(activeFriend.id) === 'online';
+                    if (isOnline) {
+                      initiateCall(activeFriend.id, activeFriend.username);
+                    } else {
+                      alert(`${activeFriend.username} is currently offline. You can only call friends who are active and online!`);
+                    }
+                  }}
+                  className="p-2.5 rounded-full transition-all hover:scale-105 active:scale-95 cursor-pointer shrink-0 flex items-center justify-center"
+                  style={{ 
+                    background: onlineFriends.get(activeFriend.id) === 'online' ? 'var(--primary-light)' : 'var(--border-light)', 
+                    color: onlineFriends.get(activeFriend.id) === 'online' ? 'var(--primary)' : 'var(--text-subtle)',
+                    border: `1px solid ${onlineFriends.get(activeFriend.id) === 'online' ? 'var(--primary-container)' : 'var(--border)'}`,
+                    opacity: onlineFriends.get(activeFriend.id) === 'online' ? 1 : 0.7
+                  }}
+                  title={onlineFriends.get(activeFriend.id) === 'online' ? "Start Voice Call" : `${activeFriend.username} is offline`}
+                >
+                  <Phone className="w-4 h-4" />
+                </button>
+              )}
+
             </div>
 
             {/* Messages Feed */}
@@ -2761,7 +2914,11 @@ export default function ChatPage() {
                               <button
                                 key={emoji}
                                 onClick={() => {
-                                  sendReaction(msg.id, isMe ? msg.receiverId : msg.senderId, emoji);
+                                  if (activeFriend.isGroup) {
+                                    sendGroupReaction(activeFriend.id, msg.id, emoji);
+                                  } else {
+                                    sendReaction(msg.id, isMe ? msg.receiverId : msg.senderId, emoji);
+                                  }
                                   setEmojiPickerMsgId(null);
                                 }}
                                 style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', padding: '2px 3px', borderRadius: '8px', transition: 'transform 0.1s', lineHeight: 1 }}
@@ -2792,17 +2949,25 @@ export default function ChatPage() {
                           overflowWrap: 'break-word',
                         }}
                       >
+                        {/* Sender username for group chats */}
+                        {activeFriend.isGroup && !isMe && (
+                          <div style={{ padding: '6px 10px 0 10px', fontSize: '11px', fontWeight: 'bold', color: 'var(--primary)' }}>
+                            {msg.senderUsername || 'Member'}
+                          </div>
+                        )}
+
                         {/* Reply quote block */}
                         {msg.replyTo && (
                           <div style={{ margin: '6px 8px 2px', padding: '5px 8px', borderRadius: '8px', borderLeft: '3px solid rgba(255,255,255,0.5)', background: isMe ? 'rgba(0,0,0,0.15)' : 'var(--border-light)', opacity: 0.9 }}>
                             <p style={{ fontSize: '10px', fontWeight: 700, margin: '0 0 1px', opacity: 0.8, color: isMe ? '#fff' : 'var(--primary)' }}>
-                              {msg.replyTo.senderId === currentUser?.id ? 'You' : activeFriend?.username}
+                              {msg.replyTo.senderId === currentUser?.id ? 'You' : (msg.replyTo.senderUsername || activeFriend?.username)}
                             </p>
                             <p style={{ fontSize: '11px', margin: 0, opacity: 0.75, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px', color: isMe ? '#fff' : 'var(--text)' }}>
                               {msg.replyTo.text || '📎 Attachment'}
                             </p>
                           </div>
                         )}
+
 
                         {/* Text only — with extra right/bottom padding for timestamp */}
                         {msg.text && !msg.mediaUrl && (
@@ -3790,12 +3955,362 @@ export default function ChatPage() {
       )}
 
       {/* ═══════════════════════════════════════
-          USER PROFILE MODAL
+          CREATE GROUP MODAL
+          ═══════════════════════════════════════ */}
+      {isCreateGroupOpen && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)',
+            padding: '16px'
+          }}
+          onClick={() => setIsCreateGroupOpen(false)}
+        >
+          <div
+            style={{
+              width: '100%', maxWidth: '400px',
+              background: 'var(--surface)',
+              borderRadius: '24px',
+              overflow: 'hidden',
+              boxShadow: '0 12px 40px rgba(0,0,0,0.25)',
+              display: 'flex', flexDirection: 'column',
+              maxHeight: '80dvh',
+              animation: 'scaleUp 0.2s ease-out'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-light)' }} className="flex justify-between items-center">
+              <h2 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text)', fontFamily: 'var(--font-jakarta)', margin: 0 }}>
+                Create Group
+              </h2>
+              <button
+                onClick={() => setIsCreateGroupOpen(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateGroup} style={{ flex: 1, overflowY: 'auto', padding: '24px' }} className="space-y-4">
+              <div>
+                <label style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-subtle)', textTransform: 'uppercase', display: 'block', marginBottom: '6px' }}>Group Name</label>
+                <input
+                  type="text"
+                  placeholder="Enter group name..."
+                  value={newGroupName}
+                  onChange={e => setNewGroupName(e.target.value)}
+                  required
+                  className="msg-field w-full"
+                  style={{ borderRadius: '10px', padding: '9px 14px', fontSize: '13px', height: '38px' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-subtle)', textTransform: 'uppercase', display: 'block', marginBottom: '6px' }}>Description</label>
+                <textarea
+                  placeholder="Enter description..."
+                  value={newGroupDesc}
+                  onChange={e => setNewGroupDesc(e.target.value)}
+                  className="msg-field w-full"
+                  rows={2}
+                  style={{ borderRadius: '10px', padding: '9px 14px', fontSize: '13px', resize: 'none' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-subtle)', textTransform: 'uppercase', display: 'block', marginBottom: '6px' }}>Select Members</label>
+                {dbFriends.length === 0 ? (
+                  <p className="text-xs text-gray-500">You need to add friends to add them to a group.</p>
+                ) : (
+                  <div style={{ maxHeight: '150px', overflowY: 'auto', background: 'var(--border-light)', borderRadius: '12px', padding: '8px 12px' }} className="space-y-2">
+                    {dbFriends.map(friend => {
+                      const isChecked = newGroupMembers.includes(friend.id);
+                      return (
+                        <label key={friend.id} className="flex items-center gap-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {
+                              if (isChecked) {
+                                setNewGroupMembers(newGroupMembers.filter(id => id !== friend.id));
+                              } else {
+                                setNewGroupMembers([...newGroupMembers, friend.id]);
+                              }
+                            }}
+                          />
+                          <span className="text-xs" style={{ color: 'var(--text)' }}>{friend.username}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateGroupOpen(false)}
+                  style={{
+                    flex: 1, padding: '10px', borderRadius: '12px', border: '1px solid var(--border)',
+                    background: 'transparent', color: 'var(--text)',
+                    fontSize: '13px', fontWeight: 700, cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingGroup || !newGroupName.trim()}
+                  style={{
+                    flex: 1, padding: '10px', borderRadius: '12px', border: 'none',
+                    background: 'var(--primary)', color: '#fff',
+                    fontSize: '13px', fontWeight: 700, cursor: 'pointer',
+                    opacity: (!newGroupName.trim() || isCreatingGroup) ? 0.6 : 1
+                  }}
+                >
+                  {isCreatingGroup ? 'Creating...' : 'Create'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════
+          USER PROFILE / GROUP MODAL
           ═══════════════════════════════════════ */}
       {viewingUser && (() => {
+        if (viewingUser.isGroup) {
+          const detail = activeGroupDetails;
+          const isAdmin = detail?.members?.find(m => m.userId === currentUser?.id)?.role === 'admin';
+          return (
+            <div
+              style={{
+                position: 'fixed', inset: 0, zIndex: 9999,
+                display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+                background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)',
+              }}
+              onClick={() => setViewingUser(null)}
+            >
+              <div
+                style={{
+                  width: '100%', maxWidth: '420px',
+                  background: 'var(--surface)',
+                  borderRadius: '28px 28px 0 0',
+                  overflow: 'hidden',
+                  maxHeight: '85dvh',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  boxShadow: '0 -8px 40px rgba(0,0,0,0.25)',
+                  animation: 'slideUp 0.28s cubic-bezier(0.34,1.56,0.64,1)',
+                }}
+                onClick={e => e.stopPropagation()}
+              >
+                {/* Header/Banner */}
+                <div style={{
+                  height: '110px', position: 'relative', flexShrink: 0,
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                }}>
+                  <button
+                    onClick={() => setViewingUser(null)}
+                    style={{ position: 'absolute', top: '10px', right: '12px', background: 'rgba(0,0,0,0.3)', border: 'none', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff' }}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Avatar */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '-38px', flexShrink: 0 }}>
+                  <div style={{ position: 'relative', display: 'inline-block' }}>
+                    <div style={{ position: 'absolute', inset: '-3px', borderRadius: '50%', background: 'linear-gradient(135deg, #10b981, #059669)', opacity: 0.7, filter: 'blur(4px)', zIndex: 0 }} />
+                    <div style={{
+                      width: '76px', height: '76px', borderRadius: '50%',
+                      border: '3px solid var(--surface)',
+                      background: 'var(--primary)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      overflow: 'hidden', position: 'relative', zIndex: 1,
+                      boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+                      fontSize: '22px', fontWeight: 800, color: '#fff',
+                    }}>
+                      {viewingUser.username?.slice(0, 2)}
+                    </div>
+                  </div>
+
+                  <h2 style={{ margin: '10px 0 2px', fontSize: '17px', fontWeight: 800, color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>
+                    {viewingUser.username}
+                  </h2>
+                  <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>Group Chat</p>
+                </div>
+
+                {/* Group details list */}
+                <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }} className="space-y-4">
+                  {/* Description */}
+                  {viewingUser.description && (
+                    <div style={{ background: 'var(--border-light)', borderRadius: '16px', padding: '12px 16px' }}>
+                      <p style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-subtle)', margin: '0 0 4px', textTransform: 'uppercase' }}>Description</p>
+                      <p style={{ fontSize: '13px', color: 'var(--text)', margin: 0 }}>{viewingUser.description}</p>
+                    </div>
+                  )}
+
+                  {/* Members List */}
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <p style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-subtle)', margin: 0, textTransform: 'uppercase' }}>
+                        Members ({detail?.members?.length || 0})
+                      </p>
+                      {isAdmin && (
+                        <button
+                          onClick={() => {
+                            const friendId = prompt("Enter username of friend to add:");
+                            if (!friendId) return;
+                            const targetFriend = dbFriends.find(f => f.username.toLowerCase() === friendId.toLowerCase());
+                            if (!targetFriend) {
+                              alert("User must be in your friends list!");
+                              return;
+                            }
+                            // Call API
+                            const token = localStorage.getItem('chapp_token');
+                            fetch(`${BACKEND_URL}/api/groups/${viewingUser.id}/members`, {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                              },
+                              body: JSON.stringify({ userId: targetFriend.id })
+                            }).then(res => {
+                              if (res.ok) {
+                                fetch(`${BACKEND_URL}/api/groups/${viewingUser.id}`, {
+                                  headers: { 'Authorization': `Bearer ${token}` }
+                                }).then(r => r.json()).then(data => setActiveGroupDetails(data));
+                              } else {
+                                alert("Failed to add member");
+                              }
+                            });
+                          }}
+                          className="px-2 py-1 rounded text-xs font-bold text-white border-none cursor-pointer"
+                          style={{ background: 'var(--primary)' }}
+                        >
+                          + Add Friend
+                        </button>
+                      )}
+                    </div>
+
+                    <div style={{ background: 'var(--border-light)', borderRadius: '16px', padding: '8px 12px' }} className="space-y-2 divide-y divide-gray-200">
+                      {detail?.members?.map(member => (
+                        <div key={member.userId} className="flex items-center justify-between py-2.5">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs text-white" style={{ background: getAvatarColor(member.user?.username), fontWeight: 'bold' }}>
+                              {member.user?.username?.slice(0, 2)}
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold" style={{ color: 'var(--text)' }}>
+                                {member.user?.username} {member.userId === currentUser?.id && '(You)'}
+                              </p>
+                              <p className="text-[10px] text-gray-500 capitalize">{member.role}</p>
+                            </div>
+                          </div>
+
+                          {isAdmin && member.userId !== currentUser?.id && (
+                            <button
+                              onClick={() => {
+                                if (!confirm(`Remove ${member.user?.username} from group?`)) return;
+                                const token = localStorage.getItem('chapp_token');
+                                fetch(`${BACKEND_URL}/api/groups/${viewingUser.id}/members/${member.userId}`, {
+                                  method: 'DELETE',
+                                  headers: { 'Authorization': `Bearer ${token}` }
+                                }).then(res => {
+                                  if (res.ok) {
+                                    fetch(`${BACKEND_URL}/api/groups/${viewingUser.id}`, {
+                                      headers: { 'Authorization': `Bearer ${token}` }
+                                    }).then(r => r.json()).then(data => setActiveGroupDetails(data));
+                                  } else {
+                                    alert("Failed to remove member");
+                                  }
+                                });
+                              }}
+                              className="text-[10px] text-red-500 font-bold border-none bg-transparent cursor-pointer hover:underline"
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="pt-2 flex gap-2">
+                    <button
+                      onClick={() => {
+                        if (!confirm("Are you sure you want to leave this group?")) return;
+                        const token = localStorage.getItem('chapp_token');
+                        fetch(`${BACKEND_URL}/api/groups/${viewingUser.id}/leave`, {
+                          method: 'POST',
+                          headers: { 'Authorization': `Bearer ${token}` }
+                        }).then(async res => {
+                          if (res.ok) {
+                            await db.chats.delete(viewingUser.id);
+                            await db.groups.delete(viewingUser.id);
+                            setActiveFriend(null);
+                            setViewingUser(null);
+                            if (token) fetchGroups(token);
+                          } else {
+                            alert("Failed to leave group");
+                          }
+                        });
+                      }}
+                      style={{
+                        flex: 1, padding: '12px', borderRadius: '16px', border: 'none',
+                        background: '#ef4444', color: '#fff',
+                        fontSize: '13px', fontWeight: 700, cursor: 'pointer',
+                        fontFamily: 'var(--font-jakarta)',
+                      }}
+                    >
+                      Leave Group
+                    </button>
+
+                    {isAdmin && (
+                      <button
+                        onClick={() => {
+                          if (!confirm("Are you sure you want to delete this group? This action is permanent!")) return;
+                          const token = localStorage.getItem('chapp_token');
+                          fetch(`${BACKEND_URL}/api/groups/${viewingUser.id}`, {
+                            method: 'DELETE',
+                            headers: { 'Authorization': `Bearer ${token}` }
+                          }).then(async res => {
+                            if (res.ok) {
+                              await db.chats.delete(viewingUser.id);
+                              await db.groups.delete(viewingUser.id);
+                              setActiveFriend(null);
+                              setViewingUser(null);
+                              if (token) fetchGroups(token);
+                            } else {
+                              alert("Failed to delete group");
+                            }
+                          });
+                        }}
+                        style={{
+                          flex: 1, padding: '12px', borderRadius: '16px', border: '1px solid #ef4444',
+                          background: 'transparent', color: '#ef4444',
+                          fontSize: '13px', fontWeight: 700, cursor: 'pointer',
+                          fontFamily: 'var(--font-jakarta)',
+                        }}
+                      >
+                        Delete Group
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
         const isFriend = dbFriends.some(f => f.id === viewingUser.id);
         const isOnline = onlineFriends.get(viewingUser.id) === 'online';
         const isMe = viewingUser.id === currentUser?.id;
+
         return (
           <div
             style={{

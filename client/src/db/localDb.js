@@ -16,4 +16,8 @@ db.version(2).stores({
   e2eeKeys: 'id'
 });
 
+db.version(3).stores({
+  groups: 'id, name, avatar, description, createdById'
+});
+
 export default db;
