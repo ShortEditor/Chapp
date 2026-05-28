@@ -2444,31 +2444,42 @@ export default function ChatPage() {
   }, [activeStoryGroup, currentStoryIndex]);
 
   // Snap Expiry and Deletion Handler
-  const handleSnapExpiry = async (snap) => {
+  const handleSnapExpiry = useCallback(async (snap) => {
+    if (!snap) return;
     setActiveSnap(null);
     const recipientId = snap.senderId === currentUser?.id ? snap.receiverId : snap.senderId;
     await deleteMessage(snap.id, recipientId);
-  };
+  }, [currentUser, deleteMessage]);
 
   // Snap Viewer Modal countdown effect
   useEffect(() => {
     if (!activeSnap) return;
 
     setSnapCountdown(10); // 10 seconds viewer window
+    let expired = false;
 
     const timer = setInterval(() => {
       setSnapCountdown(prev => {
         if (prev <= 1) {
           clearInterval(timer);
-          handleSnapExpiry(activeSnap);
+          if (!expired) {
+            expired = true;
+            handleSnapExpiry(activeSnap);
+          }
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
 
-    return () => clearInterval(timer);
-  }, [activeSnap]);
+    return () => {
+      clearInterval(timer);
+      if (!expired) {
+        expired = true;
+        handleSnapExpiry(activeSnap);
+      }
+    };
+  }, [activeSnap, handleSnapExpiry]);
 
   // -------------------------------------------------------------
   // MESSAGING CORE LOGIC
@@ -4979,8 +4990,7 @@ export default function ChatPage() {
           className="modal-overlay animate-fade-in"
           style={{
             zIndex: 10015,
-            background: 'rgba(5, 6, 8, 0.98)',
-            backdropFilter: 'blur(30px)',
+            background: '#090a0f',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -4989,32 +4999,33 @@ export default function ChatPage() {
             left: 0,
             width: '100vw',
             height: '100vh',
+            overflow: 'hidden'
           }}
         >
-          <div 
-            className="animate-zoom-in relative w-full h-full md:h-auto md:max-w-2xl md:rounded-3xl border-none md:border md:border-slate-800/80 flex flex-col items-center justify-between p-4 md:p-6"
-            style={{
-              background: '#07080c',
-              boxShadow: '0 25px 60px -12px rgba(0,0,0,0.8)'
-            }}
-          >
-            {/* Header */}
-            <div className="w-full flex justify-between items-center mb-2 md:mb-4 px-2">
-              <h3 className="text-xs md:text-sm font-extrabold tracking-widest uppercase text-pink-500 flex items-center gap-2">
-                <Camera className="w-4 h-4 text-pink-500 animate-pulse" /> Capture {cameraTarget === 'story' ? 'Story' : 'Snap'}
-              </h3>
+          <div className="w-full max-w-sm h-full flex flex-col items-center justify-between p-6">
+            
+            {/* Top Bar */}
+            <div className="w-full flex justify-between items-center my-3 px-2">
               <button 
                 onClick={closeCamera}
-                className="p-2 rounded-full hover:bg-slate-800/80 text-slate-400 hover:text-white border-none bg-transparent cursor-pointer transition-all"
+                className="p-2 rounded-full hover:bg-slate-900/60 text-slate-400 hover:text-white border-none bg-transparent cursor-pointer transition-all"
               >
-                <X className="w-5 h-5" />
+                <X className="w-6 h-6" />
+              </button>
+              <h3 className="text-[17px] font-extrabold tracking-widest text-white uppercase text-center m-0" style={{ letterSpacing: '0.15em' }}>
+                CHAPP
+              </h3>
+              <button 
+                className="p-2 rounded-full hover:bg-slate-900/60 text-slate-400 hover:text-white border-none bg-transparent cursor-pointer transition-all"
+              >
+                <Sparkles className="w-6 h-6" />
               </button>
             </div>
 
-            {/* Viewfinder / Preview Container */}
+            {/* Viewfinder Card */}
             <div 
-              className="relative w-full flex-1 md:flex-none rounded-2xl overflow-hidden border border-slate-800/60 bg-slate-950 aspect-[3/4] md:aspect-video flex items-center justify-center shadow-inner"
-              style={{ maxHeight: '72vh', width: '100%' }}
+              className="relative w-full rounded-[36px] overflow-hidden border border-slate-800/80 bg-slate-950 aspect-[9/16] flex items-center justify-center shadow-2xl"
+              style={{ maxHeight: '68vh', width: '100%' }}
             >
               {!capturedImage ? (
                 <>
@@ -5027,48 +5038,31 @@ export default function ChatPage() {
                   />
                   
                   {/* Floating Filter Selector Row */}
-                  <div className="absolute bottom-24 left-0 right-0 flex justify-start md:justify-center gap-1.5 overflow-x-auto px-4 py-2 custom-scrollbar bg-black/45 backdrop-blur-[4px] z-15">
-                    {CAMERA_FILTERS.map((f) => {
+                  <div 
+                    className="absolute bottom-6 left-0 right-0 flex justify-center gap-2 overflow-x-auto px-4 py-2 scrollbar-hide z-15"
+                    style={{
+                      WebkitOverflowScrolling: 'touch',
+                      msOverflowStyle: 'none',
+                      scrollbarWidth: 'none'
+                    }}
+                  >
+                    {CAMERA_FILTERS.slice(0, 3).map((f) => {
                       const isActive = activeCameraFilter === f.id;
                       return (
                         <button
                           key={f.id}
                           type="button"
                           onClick={() => setActiveCameraFilter(f.id)}
-                          className={`px-3 py-1 rounded-full text-[9px] font-extrabold tracking-wider uppercase transition-all shrink-0 cursor-pointer ${
+                          className={`px-4 py-2 rounded-full text-[9px] font-extrabold tracking-wider uppercase transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
                             isActive 
-                              ? 'bg-pink-500 text-white shadow-[0_0_10px_rgba(245,87,108,0.5)] scale-105' 
-                              : 'bg-black/60 text-slate-300 hover:text-white border border-slate-800/80 hover:bg-slate-900/60'
+                              ? 'bg-[#7c3aed] text-white shadow-[0_0_15px_rgba(124,58,237,0.4)] scale-105' 
+                              : 'bg-black/45 text-slate-300 border border-slate-700/40 hover:bg-slate-900/60'
                           }`}
                         >
                           {f.name}
                         </button>
                       );
                     })}
-                  </div>
-                  
-                  {/* Action controls inside viewfinder bottom */}
-                  <div className="absolute bottom-6 left-0 right-0 flex justify-center items-center gap-8 z-10 px-4">
-                    {/* Placeholder on left to keep balance */}
-                    <div className="w-12 h-12" />
-
-                    {/* Main Capture button */}
-                    <button
-                      onClick={capturePhoto}
-                      className="w-18 h-18 rounded-full border-4 border-white bg-pink-500/20 hover:bg-pink-500/30 active:scale-90 transition-all flex items-center justify-center shadow-[0_0_20px_rgba(245,87,108,0.5)] cursor-pointer"
-                    >
-                      <div className="w-12 h-12 rounded-full bg-pink-500 hover:bg-pink-400 transition-colors" />
-                    </button>
-
-                    {/* Flip Camera button */}
-                    <button
-                      type="button"
-                      onClick={flipCamera}
-                      className="w-12 h-12 rounded-full bg-black/60 hover:bg-black/80 border border-white/20 hover:border-white/40 text-white flex items-center justify-center transition-all cursor-pointer shadow-lg active:scale-90"
-                      title="Flip Camera (Front/Back)"
-                    >
-                      <RefreshCw className="w-5 h-5 text-slate-200 hover:text-white" />
-                    </button>
                   </div>
                 </>
               ) : (
@@ -5078,17 +5072,17 @@ export default function ChatPage() {
                     alt="Captured Media" 
                     className="w-full h-full object-cover" 
                   />
-                  <div className="absolute inset-0 bg-black/35 backdrop-blur-[2px] flex flex-col items-center justify-end p-6 gap-4">
-                    <div className="flex gap-4 w-full max-w-sm justify-center mb-2">
+                  <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex flex-col items-center justify-end p-6 gap-4">
+                    <div className="flex gap-4 w-full justify-center mb-2">
                       <button 
                         onClick={() => openCamera(cameraTarget)}
-                        className="flex-1 py-3 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/60 text-white font-semibold text-xs tracking-wider uppercase transition-all cursor-pointer shadow-lg active:scale-95 text-center"
+                        className="flex-1 py-3 rounded-2xl bg-slate-950/90 hover:bg-slate-900 border border-slate-800 text-white font-semibold text-xs tracking-wider uppercase transition-all cursor-pointer shadow-lg active:scale-95 text-center"
                       >
                         Retake
                       </button>
                       <button 
                         onClick={handleSendCameraMedia}
-                        className="flex-1 py-3 rounded-xl bg-pink-500 hover:bg-pink-600 text-white font-extrabold text-xs tracking-widest uppercase transition-all cursor-pointer shadow-[0_0_15px_rgba(245,87,108,0.3)] hover:scale-[1.02] active:scale-95 text-center"
+                        className="flex-1 py-3 rounded-2xl bg-[#7c3aed] hover:bg-purple-600 text-white font-extrabold text-xs tracking-widest uppercase transition-all cursor-pointer shadow-[0_0_15px_rgba(124,58,237,0.3)] hover:scale-[1.02] active:scale-95 text-center"
                       >
                         {cameraTarget === 'story' ? 'Edit Story' : 'Send Snap 🚀'}
                       </button>
@@ -5098,7 +5092,40 @@ export default function ChatPage() {
               )}
             </div>
 
-            <p className="text-[10px] text-slate-500 mt-2 md:mt-4 text-center px-4">
+            {/* Action controls below card */}
+            <div className="w-full flex justify-center items-center gap-8 my-4">
+              {/* Left spacer for symmetry */}
+              <div className="w-12 h-12" />
+
+              {/* Main Shutter Button */}
+              {!capturedImage ? (
+                <button
+                  onClick={capturePhoto}
+                  className="w-20 h-20 rounded-full border-[5px] border-white flex items-center justify-center hover:scale-105 active:scale-95 transition-all cursor-pointer bg-transparent"
+                >
+                  <div className="w-14 h-14 rounded-full bg-[#7c3aed] hover:bg-purple-600 transition-colors" />
+                </button>
+              ) : (
+                <div className="w-20 h-20" />
+              )}
+
+              {/* Flip Camera button */}
+              {!capturedImage ? (
+                <button
+                  type="button"
+                  onClick={flipCamera}
+                  className="w-12 h-12 rounded-full bg-slate-900/80 hover:bg-slate-800 border border-slate-850 text-white flex items-center justify-center transition-all cursor-pointer shadow-lg active:scale-90"
+                  title="Flip Camera (Front/Back)"
+                >
+                  <RefreshCw className="w-5 h-5 text-slate-200" />
+                </button>
+              ) : (
+                <div className="w-12 h-12" />
+              )}
+            </div>
+
+            {/* Bottom text */}
+            <p className="text-[11px] text-slate-500 font-medium tracking-wide text-center leading-relaxed max-w-xs px-2 mb-2">
               Make sure camera permissions are enabled. Mirror mode active for front-facing capture.
             </p>
           </div>
@@ -5582,6 +5609,14 @@ export default function ChatPage() {
             height: '100vh',
           }}
         >
+          {/* Back Button */}
+          <button
+            onClick={() => setActiveSnap(null)}
+            className="absolute top-6 left-6 flex items-center gap-2 px-4.5 py-2.5 rounded-full bg-black/60 hover:bg-black/80 border border-white/20 hover:border-white/40 text-white font-extrabold text-xs uppercase tracking-widest transition-all cursor-pointer shadow-lg active:scale-95 z-20"
+          >
+            <ArrowLeft className="w-4 h-4" /> Back
+          </button>
+
           {/* Big countdown timer */}
           <div 
             className="absolute top-6 right-6 w-14 h-14 rounded-full border-4 border-pink-500 flex items-center justify-center font-bold text-white text-xl bg-black/60 backdrop-blur-md shadow-[0_0_15px_rgba(245,87,108,0.5)] z-20"
@@ -5774,13 +5809,13 @@ export default function ChatPage() {
                                 width: '100vw',
                                 height: '100vh',
                                 zIndex: 10002,
-                                background: 'rgba(0,0,0,0.3)',
+                                background: 'transparent',
                               }}
                             />
                             <div 
                               style={{
-                                position: 'fixed',
-                                bottom: '120px',
+                                position: 'absolute',
+                                bottom: '60px',
                                 left: '50%',
                                 transform: 'translateX(-50%)',
                                 width: '280px',
