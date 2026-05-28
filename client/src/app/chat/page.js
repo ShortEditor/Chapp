@@ -2070,6 +2070,32 @@ export default function ChatPage() {
                 </div>
               </div>
 
+              {/* ── Settings Row ── */}
+              <div style={{ padding: '0 14px', marginBottom: '10px' }}>
+                <button
+                  onClick={() => { setSettingsTab('backup'); setShowSettings(true); }}
+                  style={{
+                    width: '100%', background: 'var(--surface)', borderRadius: '18px',
+                    border: '1px solid var(--border-light)', boxShadow: '0 1px 6px rgba(0,0,0,0.05)',
+                    padding: '13px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    cursor: 'pointer', textAlign: 'left',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-2)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'var(--surface)'}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '30px', height: '30px', borderRadius: '10px', background: 'rgba(99,102,241,0.10)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Settings style={{ width: '14px', height: '14px', color: '#6366f1' }} />
+                    </div>
+                    <div>
+                      <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>Settings & Backup</p>
+                      <p style={{ margin: 0, fontSize: '10px', color: 'var(--text-subtle)', marginTop: '1px' }}>Profile settings, backup & sync</p>
+                    </div>
+                  </div>
+                  <ChevronUp style={{ width: '14px', height: '14px', color: 'var(--text-subtle)', transform: 'rotate(90deg)' }} />
+                </button>
+              </div>
+
               {/* ── Biography Card ── */}
               <div style={{ padding: '0 14px', marginBottom: '10px' }}>
                 <div style={{ background: 'var(--surface)', borderRadius: '18px', border: '1px solid var(--border-light)', overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.05)' }}>
