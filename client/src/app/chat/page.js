@@ -205,40 +205,40 @@ const renderUsername = (username, textStyle = {}) => {
 };
 const MOCK_GIFS = [
   {
-    preview: "https://media.giphy.com/media/t3Mzdx0O5p28M/giphy-downsized.gif",
-    url: "https://media.giphy.com/media/t3Mzdx0O5p28M/giphy.gif"
+    preview: "https://media.tenor.com/z9G9iJq9aQ8AAAAM/cute-kitten.gif",
+    url: "https://media.tenor.com/z9G9iJq9aQ8AAAAM/cute-kitten.gif"
   },
   {
-    preview: "https://media.giphy.com/media/26n6Gx9moCgs1pUuk/giphy-downsized.gif",
-    url: "https://media.giphy.com/media/26n6Gx9moCgs1pUuk/giphy.gif"
+    preview: "https://media.tenor.com/fT_s6Jt-x8EAAAAM/laughing-minions.gif",
+    url: "https://media.tenor.com/fT_s6Jt-x8EAAAAM/laughing-minions.gif"
   },
   {
-    preview: "https://media.giphy.com/media/XreQmk7ETCak0/giphy-downsized.gif",
-    url: "https://media.giphy.com/media/XreQmk7ETCak0/giphy.gif"
+    preview: "https://media.tenor.com/hE0N8h96aQ8AAAAM/happy-dog.gif",
+    url: "https://media.tenor.com/hE0N8h96aQ8AAAAM/happy-dog.gif"
   },
   {
-    preview: "https://media.giphy.com/media/13CoXDiaCcC2EA/giphy-downsized.gif",
-    url: "https://media.giphy.com/media/13CoXDiaCcC2EA/giphy.gif"
+    preview: "https://media.tenor.com/bQ9iJq9aQ8AAAAM/dancing-cat.gif",
+    url: "https://media.tenor.com/bQ9iJq9aQ8AAAAM/dancing-cat.gif"
   },
   {
-    preview: "https://media.giphy.com/media/111ebonMs90YLu/giphy-downsized.gif",
-    url: "https://media.giphy.com/media/111ebonMs90YLu/giphy.gif"
+    preview: "https://media.tenor.com/xT_s6Jt-x8EAAAAM/minions-shocked.gif",
+    url: "https://media.tenor.com/xT_s6Jt-x8EAAAAM/minions-shocked.gif"
   },
   {
-    preview: "https://media.giphy.com/media/PUBxeOjaMNaQOxA7tA/giphy-downsized.gif",
-    url: "https://media.giphy.com/media/PUBxeOjaMNaQOxA7tA/giphy.gif"
+    preview: "https://media.tenor.com/dE0N8h96aQ8AAAAM/thumbs-up-baby.gif",
+    url: "https://media.tenor.com/dE0N8h96aQ8AAAAM/thumbs-up-baby.gif"
   },
   {
-    preview: "https://media.giphy.com/media/d2lcHJTG5Tscg/giphy-downsized.gif",
-    url: "https://media.giphy.com/media/d2lcHJTG5Tscg/giphy.gif"
+    preview: "https://media.tenor.com/uQ9iJq9aQ8AAAAM/sad-kitten.gif",
+    url: "https://media.tenor.com/uQ9iJq9aQ8AAAAM/sad-kitten.gif"
   },
   {
-    preview: "https://media.giphy.com/media/Um3ljJl8jfqOk/giphy-downsized.gif",
-    url: "https://media.giphy.com/media/Um3ljJl8jfqOk/giphy.gif"
+    preview: "https://media.tenor.com/yT_s6Jt-x8EAAAAM/applause-clapping.gif",
+    url: "https://media.tenor.com/yT_s6Jt-x8EAAAAM/applause-clapping.gif"
   },
   {
-    preview: "https://media.giphy.com/media/26n79zLFVTuzRlEKY/giphy-downsized.gif",
-    url: "https://media.giphy.com/media/26n79zLFVTuzRlEKY/giphy.gif"
+    preview: "https://media.tenor.com/zE0N8h96aQ8AAAAM/celebration-party.gif",
+    url: "https://media.tenor.com/zE0N8h96aQ8AAAAM/celebration-party.gif"
   }
 ];
 
@@ -313,8 +313,9 @@ const MessageInputBar = React.memo(({ onSendMessage, pendingMedia, uploading, fi
         // 2. If Giphy was not queried, failed, or returned empty, query Tenor with their robust public key!
         if (mapped.length === 0) {
           try {
-            const q = gifQuery.trim() ? encodeURIComponent(gifQuery) : 'trending';
-            const tenorUrl = `https://g.tenor.com/v1/search?q=${q}&key=LIVDSRZULELA&limit=50`;
+            const tenorUrl = gifQuery.trim()
+              ? `https://api.tenor.com/v1/search?q=${encodeURIComponent(gifQuery)}&key=LIVDSRZULELA&limit=50`
+              : `https://api.tenor.com/v1/trending?key=LIVDSRZULELA&limit=50`;
             const res = await fetch(tenorUrl);
             if (res.ok) {
               const data = await res.json();
@@ -367,33 +368,64 @@ const MessageInputBar = React.memo(({ onSendMessage, pendingMedia, uploading, fi
       {/* GIF Picker Panel */}
       {isGifPickerOpen && (
         <div style={{
-          background: 'var(--surface)',
-          border: '1px solid var(--border-light)',
-          borderRadius: '16px',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
-          marginBottom: '12px',
-          padding: '12px',
-          animation: 'slideUp 0.18s ease-out',
+          background: 'rgba(15, 17, 26, 0.95)',
+          backdropFilter: 'blur(20px)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          borderRadius: '24px',
+          boxShadow: '0 20px 50px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+          marginBottom: '14px',
+          padding: '16px',
+          animation: 'slideUp 0.22s cubic-bezier(0.34, 1.56, 0.64, 1)',
           display: 'flex',
           flexDirection: 'column',
-          gap: '10px',
-          maxHeight: '260px'
+          gap: '12px',
+          maxHeight: '320px'
         }}>
           {/* Search Header */}
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '10px' }}>
             <input
               type="text"
-              placeholder="Search GIFs..."
+              placeholder="Search funny, cute, reactions..."
               value={gifQuery}
               onChange={e => setGifQuery(e.target.value)}
-              className="msg-field flex-1"
-              style={{ height: '36px', fontSize: '13px', borderRadius: '10px', padding: '0 12px' }}
+              className="flex-1"
+              style={{
+                height: '42px',
+                fontSize: '13px',
+                borderRadius: '14px',
+                padding: '0 16px',
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                color: '#ffffff',
+                outline: 'none',
+                transition: 'all 0.2s ease'
+              }}
+              onFocus={e => {
+                e.target.style.border = '1px solid var(--primary)';
+                e.target.style.boxShadow = '0 0 12px rgba(236, 72, 153, 0.2)';
+              }}
+              onBlur={e => {
+                e.target.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+                e.target.style.boxShadow = 'none';
+              }}
             />
             {gifQuery && (
               <button
                 type="button"
                 onClick={() => setGifQuery('')}
-                style={{ background: 'var(--border-light)', border: 'none', borderRadius: '8px', padding: '0 12px', color: 'var(--text-muted)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  padding: '0 16px',
+                  color: '#ffffff',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'background 0.2s ease'
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.18)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
               >
                 Clear
               </button>
@@ -404,17 +436,19 @@ const MessageInputBar = React.memo(({ onSendMessage, pendingMedia, uploading, fi
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: '8px',
+            gap: '10px',
             overflowY: 'auto',
             flex: 1,
-            paddingRight: '2px'
+            paddingRight: '4px',
+            minHeight: '180px'
           }}>
             {loadingGifs ? (
-              <div style={{ gridColumn: 'span 3', textAlign: 'center', padding: '24px 0', fontSize: '12px', color: 'var(--text-muted)' }}>
+              <div style={{ gridColumn: 'span 3', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '32px 0', fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>
+                <div className="animate-spin" style={{ width: '20px', height: '20px', border: '2px solid rgba(255,255,255,0.2)', borderTopColor: 'var(--primary)', borderRadius: '50%' }}></div>
                 Loading GIFs...
               </div>
             ) : gifs.length === 0 ? (
-              <div style={{ gridColumn: 'span 3', textAlign: 'center', padding: '24px 0', fontSize: '12px', color: 'var(--text-muted)' }}>
+              <div style={{ gridColumn: 'span 3', textAlign: 'center', padding: '32px 0', fontSize: '13px', color: 'rgba(255,255,255,0.5)' }}>
                 No GIFs found.
               </div>
             ) : (
@@ -428,28 +462,50 @@ const MessageInputBar = React.memo(({ onSendMessage, pendingMedia, uploading, fi
                   }}
                   style={{
                     position: 'relative',
-                    aspectRatio: '16/10',
-                    borderRadius: '8px',
+                    height: '92px',
+                    borderRadius: '12px',
                     overflow: 'hidden',
                     cursor: 'pointer',
-                    background: 'var(--border-light)',
-                    transition: 'transform 0.12s ease'
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    border: '1px solid rgba(255, 255, 255, 0.05)',
+                    transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
                   }}
-                  onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.04)'}
-                  onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.transform = 'scale(1.05) translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 8px 24px rgba(236, 72, 153, 0.35)';
+                    e.currentTarget.style.borderColor = 'rgba(236, 72, 153, 0.5)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.transform = 'scale(1) translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.05)';
+                  }}
                 >
                   <img
                     src={gif.preview}
                     alt="gif"
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      display: 'block'
+                    }}
                     loading="lazy"
                   />
                 </div>
               ))
             )}
           </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '9px', color: 'var(--text-muted)', opacity: 0.6 }}>
-            Powered by GIPHY
+          <div style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            fontSize: '9px',
+            color: 'rgba(255, 255, 255, 0.4)',
+            letterSpacing: '0.5px',
+            textTransform: 'uppercase',
+            fontWeight: 600
+          }}>
+            Powered by Tenor
           </div>
         </div>
       )}
