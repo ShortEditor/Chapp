@@ -2149,14 +2149,30 @@ export default function ChatPage() {
       }
 
       if (imageUrl) {
-        // Send message with mediaType: 'snap'
-        const messagePayload = {
-          text: '',
-          mediaUrl: imageUrl,
-          mediaType: 'snap',
-          fileName: finalFile.name
-        };
-        onSendMessage(messagePayload);
+        // Send message with mediaType: 'snap' directly using core messaging hooks to avoid type-check crashes
+        let result;
+        if (activeFriend.isGroup) {
+          result = await sendGroupMessage(
+            activeFriend.id,
+            "",
+            imageUrl,
+            "snap",
+            null
+          );
+        } else {
+          result = await sendMessage(
+            activeFriend.id,
+            "",
+            imageUrl,
+            "snap",
+            null
+          );
+        }
+
+        if (!result) {
+          setSendError("Failed to save Snap. IndexedDB may be full.");
+          setTimeout(() => setSendError(""), 4000);
+        }
       } else {
         alert("Failed to upload snap image");
       }
