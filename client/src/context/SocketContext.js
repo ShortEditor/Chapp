@@ -140,45 +140,38 @@ export function SocketProvider({ children }) {
     try {
       if (!userId) return;
       const privateKeyRecord = await db.e2eeKeys.get('private_key_' + userId);
+      const pubKeyRecord = await db.e2eeKeys.get('public_key_' + userId);
       
       let publicKeyJwk;
-      if (!privateKeyRecord) {
+      if (!privateKeyRecord || !pubKeyRecord) {
         console.log('🔑 [E2EE] No local keys found for user. Generating new ECDH keypair...');
         const keys = await generateE2EEKeyPair();
         await db.e2eeKeys.put({ id: 'private_key_' + userId, key: keys.privateKeyJwk });
         await db.e2eeKeys.put({ id: 'public_key_' + userId, key: keys.publicKeyJwk });
         publicKeyJwk = keys.publicKeyJwk;
-        
-        console.log('🔑 [E2EE] Uploading public key to server...');
-        await fetch(`${BACKEND_URL}/api/keys/public`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ publicKey: JSON.stringify(publicKeyJwk) })
-        });
       } else {
+        publicKeyJwk = pubKeyRecord.key;
         console.log('🔑 [E2EE] Local keys loaded.');
-        // Ensure server has it (e.g. if database reset)
-        const userJson = localStorage.getItem('chapp_user');
-        if (userJson) {
-          const user = JSON.parse(userJson);
-          if (!user.publicKey) {
-            const pubKeyRecord = await db.e2eeKeys.get('public_key_' + userId);
-            if (pubKeyRecord) {
-              console.log('🔑 [E2EE] Server missing public key. Uploading local key...');
-              await fetch(`${BACKEND_URL}/api/keys/public`, {
-                method: 'PUT',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ publicKey: JSON.stringify(pubKeyRecord.key) })
-              });
-            }
-          }
-        }
+      }
+
+      console.log('🔑 [E2EE] Guaranteeing server public key sync...');
+      await fetch(`${BACKEND_URL}/api/keys/public`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ publicKey: JSON.stringify(publicKeyJwk) })
+      });
+
+      // Update local storage user key
+      const userJson = localStorage.getItem('chapp_user');
+      if (userJson) {
+        try {
+          const u = JSON.parse(userJson);
+          u.publicKey = JSON.stringify(publicKeyJwk);
+          localStorage.setItem('chapp_user', JSON.stringify(u));
+        } catch (_) {}
       }
     } catch (err) {
       console.error('❌ [E2EE] Key initialization failed:', err);
