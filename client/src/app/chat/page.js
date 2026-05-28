@@ -28,6 +28,8 @@ import {
   Download,
   Plus,
   X,
+  Sun,
+  Moon,
   Sparkles,
   Info,
   ArrowLeft,
@@ -678,6 +680,32 @@ export default function ChatPage() {
   const [cameraFacingMode, setCameraFacingMode] = useState('user'); // 'user' or 'environment'
   const [activeCameraFilter, setActiveCameraFilter] = useState('normal'); // 'normal', 'grayscale', etc.
   const cameraVideoRef = useRef(null);
+
+  // Dark/Light Theme states
+  const [isDarkMode, setIsDarkMode] = useState(false);
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('chapp_theme');
+    if (savedTheme === 'dark') {
+      setIsDarkMode(true);
+      document.body.classList.add('dark-theme');
+    } else {
+      setIsDarkMode(false);
+      document.body.classList.remove('dark-theme');
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const nextMode = !isDarkMode;
+    setIsDarkMode(nextMode);
+    if (nextMode) {
+      document.body.classList.add('dark-theme');
+      localStorage.setItem('chapp_theme', 'dark');
+    } else {
+      document.body.classList.remove('dark-theme');
+      localStorage.setItem('chapp_theme', 'light');
+    }
+  };
 
   // Story Music states
   const [selectedMusic, setSelectedMusic] = useState(null); // { title, url }
@@ -2646,6 +2674,22 @@ export default function ChatPage() {
               title="New chat"
             >
               <SquarePen className="w-5 h-5" />
+            </button>
+
+            {/* Dynamic Light/Dark Theme Switcher */}
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-full transition-all cursor-pointer flex items-center justify-center active:scale-90"
+              style={{ color: 'var(--text-muted)' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--border-light)'; e.currentTarget.style.color = 'var(--primary)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+              title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            >
+              {isDarkMode ? (
+                <Sun className="w-5 h-5 text-amber-500 animate-spin-slow" />
+              ) : (
+                <Moon className="w-5 h-5 text-slate-500" />
+              )}
             </button>
 
             {activeTab !== 'chats' && (
@@ -5153,8 +5197,8 @@ export default function ChatPage() {
           className="modal-overlay animate-fade-in"
           style={{
             zIndex: 10020,
-            background: 'rgba(5, 6, 8, 0.98)',
-            backdropFilter: 'blur(20px)',
+            background: 'rgba(5, 6, 8, 0.99)',
+            backdropFilter: 'blur(30px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -5169,6 +5213,21 @@ export default function ChatPage() {
             setShowViewedByList(false);
           }}
         >
+          {/* Stunning ambient copy of active story media blurred behind the main container card */}
+          {activeStoryGroup.items[currentStoryIndex]?.mediaType !== 'video' && (
+            <div 
+              className="absolute inset-0 z-0 pointer-events-none transition-all duration-500 ease-in-out hidden md:block"
+              style={{
+                backgroundImage: `url(${optimizeMediaUrl(activeStoryGroup.items[currentStoryIndex]?.mediaUrl)})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                filter: 'blur(80px) brightness(0.35)',
+                opacity: 0.5,
+                transform: 'scale(1.2)'
+              }}
+            />
+          )}
+
           {/* Audio Background Element for Instagram music */}
           {activeStoryGroup.items[currentStoryIndex]?.musicUrl && (
             <audio 
@@ -5179,20 +5238,83 @@ export default function ChatPage() {
             />
           )}
 
+          {/* Left Arrow Button (Desktop Only) - OUTSIDE the Frame */}
+          <button 
+            disabled={currentStoryIndex === 0}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowViewedByList(false);
+              setCurrentStoryIndex(prev => prev - 1);
+              setStoryProgress(0);
+            }}
+            className="hidden md:flex absolute left-8 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 text-white items-center justify-center transition-all border border-white/15 cursor-pointer disabled:opacity-0 disabled:pointer-events-none z-35 shadow-lg active:scale-90"
+            title="Previous Story"
+          >
+            <ChevronUp className="w-6 h-6 -rotate-90 text-slate-100" />
+          </button>
+
+          {/* Right Arrow Button (Desktop Only) - OUTSIDE the Frame */}
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowViewedByList(false);
+              if (currentStoryIndex < activeStoryGroup.items.length - 1) {
+                setCurrentStoryIndex(prev => prev + 1);
+                setStoryProgress(0);
+              } else {
+                setActiveStoryGroup(null);
+              }
+            }}
+            className="hidden md:flex absolute right-8 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 text-white items-center justify-center transition-all border border-white/15 cursor-pointer z-35 shadow-lg active:scale-90"
+            title="Next Story"
+          >
+            <ChevronUp className="w-6 h-6 rotate-90 text-slate-100" />
+          </button>
+
+          {/* Main Portrait phone frame container card */}
           <div 
-            className="relative w-full max-w-lg h-full max-h-[85vh] md:max-h-[90vh] flex flex-col items-center justify-between"
+            className="relative w-full max-w-[400px] aspect-[9/16] h-[95vh] md:max-h-[82vh] rounded-[28px] overflow-hidden flex flex-col items-center justify-between border border-white/15 shadow-[0_30px_70px_rgba(0,0,0,0.85)] z-10"
+            style={{ background: '#000000' }}
             onClick={e => e.stopPropagation()}
           >
-            {/* Top Navigation & Progress */}
-            <div className="w-full p-4 absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/85 to-transparent">
+            {/* Native Gesture Tap Zones (Left 40% / Right 60%) */}
+            <div 
+              className="absolute left-0 top-0 bottom-0 w-[40%] z-20 cursor-pointer"
+              title="Tap left to go back"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (currentStoryIndex > 0) {
+                  setCurrentStoryIndex(currentStoryIndex - 1);
+                  setStoryProgress(0);
+                } else {
+                  setActiveStoryGroup(null);
+                }
+              }}
+            />
+            <div 
+              className="absolute right-0 top-0 bottom-0 w-[60%] z-20 cursor-pointer"
+              title="Tap right to go next"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (currentStoryIndex < activeStoryGroup.items.length - 1) {
+                  setCurrentStoryIndex(currentStoryIndex + 1);
+                  setStoryProgress(0);
+                } else {
+                  setActiveStoryGroup(null);
+                }
+              }}
+            />
+
+            {/* Top Navigation Overlay */}
+            <div className="w-full p-4 absolute top-0 left-0 right-0 z-30 bg-gradient-to-b from-black/90 via-black/40 to-transparent flex flex-col gap-3">
               {/* Progress Bars */}
-              <div className="flex gap-1.5 mb-4">
+              <div className="flex gap-1.5 w-full">
                 {activeStoryGroup.items.map((item, idx) => {
                   let width = '0%';
                   if (idx < currentStoryIndex) width = '100%';
                   else if (idx === currentStoryIndex) width = `${storyProgress}%`;
                   return (
-                    <div key={item.id} className="flex-1 h-1 bg-white/20 rounded-full overflow-hidden">
+                    <div key={item.id} className="flex-1 h-1 bg-white/25 rounded-full overflow-hidden">
                       <div 
                         className="h-full bg-white transition-all ease-linear" 
                         style={{ width, duration: '50ms' }}
@@ -5202,180 +5324,165 @@ export default function ChatPage() {
                 })}
               </div>
 
-              {/* User Metadata */}
-              <div className="flex items-center justify-between text-white">
+              {/* User Metadata Header */}
+              <div className="flex items-center justify-between text-white w-full">
                 <div className="flex items-center gap-3">
                   {activeStoryGroup.avatar ? (
-                    <img src={optimizeAvatarUrl(activeStoryGroup.avatar)} className="w-10 h-10 rounded-full object-cover border border-white/20" />
+                    <img src={optimizeAvatarUrl(activeStoryGroup.avatar)} className="w-9 h-9 rounded-full object-cover border border-white/20 shadow-md" />
                   ) : (
-                    <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center font-bold text-sm text-white">
+                    <div className="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center font-bold text-xs text-white border border-white/20">
                       {activeStoryGroup.username.slice(0, 2).toUpperCase()}
                     </div>
                   )}
                   <div>
-                    <div className="font-bold text-sm text-slate-200">{renderUsername(activeStoryGroup.username)}</div>
-                    <div className="text-xs text-slate-400">
+                    <div className="font-bold text-xs text-slate-100 drop-shadow-md">{renderUsername(activeStoryGroup.username)}</div>
+                    <div className="text-[10px] text-slate-300 drop-shadow-md mt-0.5">
                       {new Date(activeStoryGroup.items[currentStoryIndex]?.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   {/* Delete Button (Creator only) */}
                   {activeStoryGroup.items[currentStoryIndex]?.userId === currentUser?.id && (
                     <button 
-                      onClick={() => handleDeleteStory(activeStoryGroup.items[currentStoryIndex].id)}
-                      className="p-1.5 rounded-full hover:bg-red-500/25 text-red-400 border-none bg-transparent cursor-pointer flex items-center justify-center transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteStory(activeStoryGroup.items[currentStoryIndex].id);
+                      }}
+                      className="p-1.5 rounded-full hover:bg-red-500/25 text-red-400 border-none bg-transparent cursor-pointer flex items-center justify-center transition-all z-40"
                       title="Delete Story"
                     >
-                      <Trash2 className="w-5 h-5" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   )}
 
                   {/* Close Button */}
                   <button 
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setActiveStoryGroup(null);
                       setShowViewedByList(false);
                     }}
-                    className="p-1.5 rounded-full hover:bg-white/10 text-white border-none bg-transparent cursor-pointer"
+                    className="p-1.5 rounded-full hover:bg-white/10 text-white border-none bg-transparent cursor-pointer transition-all z-40"
+                    title="Close"
                   >
-                    <X className="w-5 h-5" />
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
               </div>
 
               {/* Music Player Indicator overlay (Instagram style) */}
               {activeStoryGroup.items[currentStoryIndex]?.musicUrl && (
-                <div className="mt-4 flex items-center justify-between bg-black/40 backdrop-blur-md border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white max-w-[280px]">
-                  <div className="flex items-center gap-2 truncate flex-1 min-w-0">
-                    <Music className="w-3.5 h-3.5 text-pink-400 animate-spin shrink-0" style={{ animationDuration: '4s' }} />
-                    <span className="truncate font-semibold tracking-wide text-slate-200">{activeStoryGroup.items[currentStoryIndex].musicTitle || "Instagram Soundtrack"}</span>
+                <div 
+                  className="flex items-center justify-between bg-black/45 backdrop-blur-md border border-white/10 rounded-full px-3 py-1 text-[10px] text-white w-max max-w-[200px] z-30 hover:bg-black/60 transition-all"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center gap-1.5 truncate flex-1 min-w-0">
+                    <Music className="w-3 h-3 text-pink-400 animate-spin shrink-0" style={{ animationDuration: '4s' }} />
+                    <span className="truncate font-bold tracking-wide text-slate-100">{activeStoryGroup.items[currentStoryIndex].musicTitle || "Soundtrack"}</span>
                   </div>
                   <button 
-                    onClick={() => setIsStoryMusicMuted(!isStoryMusicMuted)}
-                    className="p-1 text-white/70 hover:text-white bg-transparent border-none cursor-pointer shrink-0 ml-2"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsStoryMusicMuted(!isStoryMusicMuted);
+                    }}
+                    className="p-0.5 text-white/80 hover:text-white bg-transparent border-none cursor-pointer shrink-0 ml-1.5 z-40"
                   >
-                    {isStoryMusicMuted ? <VolumeX className="w-4 h-4 text-pink-400" /> : <Volume2 className="w-4 h-4 text-slate-300" />}
+                    {isStoryMusicMuted ? <VolumeX className="w-3.5 h-3.5 text-pink-400" /> : <Volume2 className="w-3.5 h-3.5 text-slate-200" />}
                   </button>
                 </div>
               )}
             </div>
 
-            {/* Media Content */}
-            <div className="flex-1 w-full flex items-center justify-center p-4">
+            {/* Full screen Immersive Media Viewport */}
+            <div className="absolute inset-0 w-full h-full z-0 bg-neutral-950">
               {activeStoryGroup.items[currentStoryIndex]?.mediaType === 'video' ? (
                 <video 
                   src={optimizeMediaUrl(activeStoryGroup.items[currentStoryIndex]?.mediaUrl)} 
                   autoPlay 
                   playsInline
-                  style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: '16px' }} 
+                  className="w-full h-full object-cover select-none pointer-events-none"
                 />
               ) : (
                 <img 
                   src={optimizeMediaUrl(activeStoryGroup.items[currentStoryIndex]?.mediaUrl)} 
                   alt="Story content" 
-                  style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: '16px' }}
+                  className="w-full h-full object-cover select-none pointer-events-none"
                 />
               )}
             </div>
 
-            {/* Caption & Navigation Controls */}
+            {/* Caption (Instagram story text styling overlay) */}
             {activeStoryGroup.items[currentStoryIndex]?.caption && (
-              <div className="absolute bottom-16 left-4 right-4 bg-black/60 backdrop-blur-md text-white text-center py-3 px-4 rounded-xl text-sm border border-white/10">
+              <div 
+                className="absolute bottom-16 left-4 right-4 z-30 bg-black/45 backdrop-blur-md text-white text-center py-2 px-3.5 rounded-2xl text-[11px] font-semibold tracking-wide border border-white/5 shadow-md max-h-[80px] overflow-y-auto"
+                onClick={e => e.stopPropagation()}
+              >
                 {activeStoryGroup.items[currentStoryIndex].caption}
               </div>
             )}
 
             {/* Viewed by list footer trigger button (for owners) */}
             {activeStoryGroup.items[currentStoryIndex]?.userId === currentUser?.id && (
-              <div className="absolute bottom-4 left-0 right-0 flex justify-center z-20">
+              <div className="absolute bottom-4 left-0 right-0 flex justify-center z-30">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     setShowViewedByList(true);
                   }}
-                  className="px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-xs text-white/90 font-semibold flex items-center gap-1.5 border border-white/15 cursor-pointer shadow-lg backdrop-blur-md"
+                  className="px-3.5 py-1 rounded-full bg-black/50 hover:bg-black/70 active:scale-95 transition-all text-[10px] text-white/90 font-bold flex items-center gap-1.5 border border-white/10 cursor-pointer shadow-lg backdrop-blur-md"
                 >
-                  <Eye className="w-3.5 h-3.5" /> Viewed by {activeStoryGroup.items[currentStoryIndex]?.views?.length || 0} friends
+                  <Eye className="w-3 h-3" /> Views ({activeStoryGroup.items[currentStoryIndex]?.views?.length || 0})
                 </button>
               </div>
             )}
 
-            {/* Viewed by overlay sheet */}
+            {/* Viewed by overlay sheet inside the card */}
             {showViewedByList && (
               <div 
-                className="absolute inset-0 bg-black/95 backdrop-blur-md rounded-2xl flex flex-col z-30 animate-fade-in p-5"
+                className="absolute inset-0 bg-black/95 backdrop-blur-md rounded-[28px] flex flex-col z-40 animate-fade-in p-5"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex justify-between items-center border-b border-white/10 pb-3 mb-4">
-                  <h4 className="text-sm font-extrabold tracking-wider uppercase text-pink-500 flex items-center gap-2">
-                    <Eye className="w-4 h-4 text-pink-500" /> Story Views ({activeStoryGroup.items[currentStoryIndex]?.views?.length || 0})
+                  <h4 className="text-xs font-extrabold tracking-wider uppercase text-pink-500 flex items-center gap-2">
+                    <Eye className="w-3.5 h-3.5 text-pink-500" /> Story Views ({activeStoryGroup.items[currentStoryIndex]?.views?.length || 0})
                   </h4>
                   <button 
                     onClick={() => setShowViewedByList(false)}
-                    className="p-1.5 rounded-full hover:bg-white/10 text-white/60 hover:text-white border-none bg-transparent cursor-pointer"
+                    className="p-1 rounded-full hover:bg-white/10 text-white/60 hover:text-white border-none bg-transparent cursor-pointer"
                   >
-                    <X className="w-5 h-5" />
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2.5">
+                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
                   {activeStoryGroup.items[currentStoryIndex]?.views && activeStoryGroup.items[currentStoryIndex].views.length > 0 ? (
                     activeStoryGroup.items[currentStoryIndex].views.map((v) => (
-                      <div key={v.id} className="flex items-center justify-between p-2.5 rounded-xl bg-white/5 border border-white/5">
-                        <div className="flex items-center gap-3">
+                      <div key={v.id} className="flex items-center justify-between p-2 rounded-xl bg-white/5 border border-white/5">
+                        <div className="flex items-center gap-2.5">
                           {v.user?.avatar ? (
-                            <img src={optimizeAvatarUrl(v.user.avatar)} className="w-8 h-8 rounded-full object-cover border border-white/15" />
+                            <img src={optimizeAvatarUrl(v.user.avatar)} className="w-7 h-7 rounded-full object-cover border border-white/15" />
                           ) : (
-                            <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center font-bold text-xs text-white">
+                            <div className="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center font-bold text-[10px] text-white">
                               {v.user?.username?.slice(0, 2).toUpperCase()}
                             </div>
                           )}
-                          <span className="text-xs font-bold text-slate-200">{v.user?.username}</span>
+                          <span className="text-[11px] font-bold text-slate-200">{v.user?.username}</span>
                         </div>
-                        <span className="text-[10px] text-slate-500">
+                        <span className="text-[9px] text-slate-500">
                           {new Date(v.viewedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
                     ))
                   ) : (
-                    <div className="text-center py-10 text-xs text-slate-500">
+                    <div className="text-center py-10 text-[10px] text-slate-500">
                       No views yet. Active friends will see your story updates!
                     </div>
                   )}
                 </div>
               </div>
             )}
-
-            {/* Prev/Next Navigation Overlay Buttons */}
-            <div className="absolute top-1/2 -translate-y-1/2 left-2 right-2 flex justify-between w-[calc(100%-16px)] pointer-events-none">
-              <button 
-                disabled={currentStoryIndex === 0}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowViewedByList(false);
-                  setCurrentStoryIndex(prev => prev - 1);
-                }}
-                className="w-10 h-10 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors pointer-events-auto border-none cursor-pointer disabled:opacity-0 disabled:pointer-events-none z-10"
-              >
-                ‹
-              </button>
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowViewedByList(false);
-                  if (currentStoryIndex < activeStoryGroup.items.length - 1) {
-                    setCurrentStoryIndex(prev => prev + 1);
-                  } else {
-                    setActiveStoryGroup(null);
-                  }
-                }}
-                className="w-10 h-10 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors pointer-events-auto border-none cursor-pointer z-10"
-              >
-                ›
-              </button>
-            </div>
           </div>
         </div>
       )}

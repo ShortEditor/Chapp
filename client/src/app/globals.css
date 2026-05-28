@@ -42,6 +42,39 @@
   --r-full: 9999px;
 }
 
+.dark-theme {
+  /* Surfaces */
+  --bg:              #0b0e14;
+  --surface:         #151922;
+  --surface-2:       #1e2432;
+  --sidebar-bg:      #11151e;
+  --chat-bg:         #07090d;
+
+  /* Primary (blue) */
+  --primary:         #1d9bf0;
+  --primary-dark:    #0c85d0;
+  --primary-light:   rgba(29, 155, 240, 0.12);
+  --primary-container: rgba(29, 155, 240, 0.2);
+
+  /* Text */
+  --text:            #f8fafc;
+  --text-muted:      #94a3b8;
+  --text-subtle:     #64748b;
+
+  /* Borders */
+  --border:          rgba(255, 255, 255, 0.08);
+  --border-light:    rgba(255, 255, 255, 0.04);
+
+  /* Chat bubbles */
+  --bubble-out-bg:   #1d9bf0;
+  --bubble-out-text: #ffffff;
+  --bubble-in-bg:    #1e2432;
+  --bubble-in-text:  #f8fafc;
+
+  /* Status */
+  --online:          #10b981;
+}
+
 @theme {
   --font-sans:    'Inter', system-ui, sans-serif;
   --font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
