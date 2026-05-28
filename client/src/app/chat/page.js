@@ -73,6 +73,16 @@ if (typeof window !== 'undefined') {
 }
 
 
+const CAMERA_FILTERS = [
+  { id: 'normal', name: 'Original ✨', filter: 'none' },
+  { id: 'grayscale', name: 'Noir 🖤', filter: 'grayscale(1) contrast(1.1)' },
+  { id: 'sepia', name: 'Vintage 🎞️', filter: 'sepia(0.85) contrast(1.05) saturate(0.95)' },
+  { id: 'warm', name: 'Warm ☀️', filter: 'saturate(1.35) sepia(0.12) brightness(1.05)' },
+  { id: 'cool', name: 'Cool ❄️', filter: 'contrast(1.05) saturate(1.2) hue-rotate(30deg) brightness(0.98)' },
+  { id: 'neon', name: 'Cyberpunk 👾', filter: 'hue-rotate(280deg) saturate(1.8) contrast(1.2)' },
+  { id: 'dramatic', name: 'Dramatic 🎭', filter: 'contrast(1.4) brightness(0.88) saturate(1.1)' }
+];
+
 const ensureSecureUrl = (url) => {
   if (!url) return url;
   return url.startsWith('http://') ? url.replace('http://', 'https://') : url;
@@ -666,6 +676,7 @@ export default function ChatPage() {
   const [capturedImage, setCapturedImage] = useState(null);
   const [cameraTarget, setCameraTarget] = useState('snap'); // 'snap' or 'story'
   const [cameraFacingMode, setCameraFacingMode] = useState('user'); // 'user' or 'environment'
+  const [activeCameraFilter, setActiveCameraFilter] = useState('normal'); // 'normal', 'grayscale', etc.
   const cameraVideoRef = useRef(null);
 
   // Story Music states
@@ -1980,6 +1991,17 @@ export default function ChatPage() {
       canvas.width = video.videoWidth || 640;
       canvas.height = video.videoHeight || 480;
       const ctx = canvas.getContext('2d');
+      
+      // Mirror horizontally if user front camera
+      if (cameraFacingMode === 'user') {
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+      }
+      
+      // Apply active visual filter to canvas context!
+      const activeFilterObj = CAMERA_FILTERS.find(f => f.id === activeCameraFilter);
+      ctx.filter = activeFilterObj?.filter || 'none';
+      
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
       setCapturedImage(dataUrl);
@@ -4882,7 +4904,29 @@ export default function ChatPage() {
                     autoPlay 
                     playsInline 
                     className={`w-full h-full object-cover ${cameraFacingMode === 'user' ? 'transform -scale-x-100' : ''}`}
+                    style={{ filter: CAMERA_FILTERS.find(f => f.id === activeCameraFilter)?.filter || 'none' }}
                   />
+                  
+                  {/* Floating Filter Selector Row */}
+                  <div className="absolute bottom-24 left-0 right-0 flex justify-start md:justify-center gap-1.5 overflow-x-auto px-4 py-2 custom-scrollbar bg-black/45 backdrop-blur-[4px] z-15">
+                    {CAMERA_FILTERS.map((f) => {
+                      const isActive = activeCameraFilter === f.id;
+                      return (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onClick={() => setActiveCameraFilter(f.id)}
+                          className={`px-3 py-1 rounded-full text-[9px] font-extrabold tracking-wider uppercase transition-all shrink-0 cursor-pointer ${
+                            isActive 
+                              ? 'bg-pink-500 text-white shadow-[0_0_10px_rgba(245,87,108,0.5)] scale-105' 
+                              : 'bg-black/60 text-slate-300 hover:text-white border border-slate-800/80 hover:bg-slate-900/60'
+                          }`}
+                        >
+                          {f.name}
+                        </button>
+                      );
+                    })}
+                  </div>
                   
                   {/* Action controls inside viewfinder bottom */}
                   <div className="absolute bottom-6 left-0 right-0 flex justify-center items-center gap-8 z-10 px-4">
@@ -4913,7 +4957,7 @@ export default function ChatPage() {
                   <img 
                     src={capturedImage} 
                     alt="Captured Media" 
-                    className={`w-full h-full object-cover ${cameraFacingMode === 'user' ? 'transform -scale-x-100' : ''}`} 
+                    className="w-full h-full object-cover" 
                   />
                   <div className="absolute inset-0 bg-black/35 backdrop-blur-[2px] flex flex-col items-center justify-end p-6 gap-4">
                     <div className="flex gap-4 w-full max-w-sm justify-center mb-2">
