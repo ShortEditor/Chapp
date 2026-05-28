@@ -560,7 +560,8 @@ export function SocketProvider({ children }) {
           mediaUrl: mediaUrlToSend,
           mediaType: msg.mediaType,
           timestamp: msg.timestamp,
-          isEncrypted
+          isEncrypted,
+          replyTo: msg.replyTo || null
         });
       }
     } catch (err) {
@@ -647,7 +648,9 @@ export function SocketProvider({ children }) {
 
         await db.messages.put({
           id, chatId: senderId, senderId, receiverId,
-          text: decryptedText, mediaUrl: decryptedMediaUrl, mediaType, timestamp, status: 'ack'
+          text: decryptedText, mediaUrl: decryptedMediaUrl, mediaType, timestamp, status: 'ack',
+          replyTo: message.replyTo || null,
+          reactions: {}
         });
 
         const isActiveChat = activeChatRef.current === senderId;
@@ -698,7 +701,9 @@ export function SocketProvider({ children }) {
 
           await db.messages.put({
             id, chatId: senderId, senderId, receiverId,
-            text: decryptedText, mediaUrl: decryptedMediaUrl, mediaType, timestamp, status: 'ack'
+            text: decryptedText, mediaUrl: decryptedMediaUrl, mediaType, timestamp, status: 'ack',
+            replyTo: msg.replyTo || null,
+            reactions: {}
           });
 
           const isActiveChat = activeChatRef.current === senderId;
@@ -849,10 +854,27 @@ export function SocketProvider({ children }) {
     newSocket.on('message-deleted', async ({ messageId }) => {
       try {
         await db.messages.delete(messageId);
-        console.log(`🗑️ [SocketContext] Message ${messageId} deleted from local DB`);
       } catch (err) {
         console.error('❌ [SocketContext] Error deleting message from DB:', err);
       }
+    });
+
+    // RECEIVE REACTION from other user
+    newSocket.on('receive-reaction', async ({ messageId, emoji, senderId }) => {
+      try {
+        const msg = await db.messages.get(messageId);
+        if (msg) {
+          const reactions = { ...(msg.reactions || {}) };
+          const users = reactions[emoji] ? [...reactions[emoji]] : [];
+          if (users.includes(senderId)) {
+            reactions[emoji] = users.filter(u => u !== senderId);
+            if (reactions[emoji].length === 0) delete reactions[emoji];
+          } else {
+            reactions[emoji] = [...users, senderId];
+          }
+          await db.messages.update(messageId, { reactions });
+        }
+      } catch (err) { console.error('Reaction receive error:', err); }
     });
 
     socketRef.current = newSocket;
@@ -890,7 +912,7 @@ export function SocketProvider({ children }) {
   };
 
   // SEND MESSAGE — uses ref so never has stale socket
-  const sendMessage = useCallback(async (receiverId, text, mediaUrl = null, mediaType = null) => {
+  const sendMessage = useCallback(async (receiverId, text, mediaUrl = null, mediaType = null, replyTo = null) => {
     const activeSocket = socketRef.current;
     const isOnline = activeSocket && activeSocket.connected;
 
@@ -907,7 +929,9 @@ export function SocketProvider({ children }) {
       mediaUrl,
       mediaType,
       timestamp,
-      status: 'sending'
+      status: 'sending',
+      replyTo: replyTo || null,
+      reactions: {}
     };
 
     try {
@@ -946,7 +970,8 @@ export function SocketProvider({ children }) {
           mediaUrl: mediaUrlToSend,
           mediaType,
           timestamp,
-          isEncrypted
+          isEncrypted,
+          replyTo: replyTo || null
         });
         console.log('📤 [SocketContext] Message sent (online):', messageId, 'Encrypted:', isEncrypted);
       } else {
@@ -986,6 +1011,31 @@ export function SocketProvider({ children }) {
     }
   }, []);
 
+
+  // SEND REACTION — toggle emoji on a message, relay to the other user
+  const sendReaction = useCallback(async (messageId, recipientId, emoji) => {
+    const currentUser = JSON.parse(localStorage.getItem('chapp_user') || '{}');
+    if (!currentUser.id || !messageId || !emoji) return;
+    try {
+      const msg = await db.messages.get(messageId);
+      if (msg) {
+        const reactions = { ...(msg.reactions || {}) };
+        const users = reactions[emoji] ? [...reactions[emoji]] : [];
+        if (users.includes(currentUser.id)) {
+          reactions[emoji] = users.filter(u => u !== currentUser.id);
+          if (reactions[emoji].length === 0) delete reactions[emoji];
+        } else {
+          reactions[emoji] = [...users, currentUser.id];
+        }
+        await db.messages.update(messageId, { reactions });
+      }
+    } catch (err) { console.error('Reaction local update error:', err); }
+    const activeSocket = socketRef.current;
+    if (activeSocket && activeSocket.connected) {
+      activeSocket.emit('send-reaction', { messageId, recipientId, emoji });
+    }
+  }, []);
+
   return (
     <SocketContext.Provider
       value={{
@@ -998,6 +1048,7 @@ export function SocketProvider({ children }) {
         disconnectSocket,
         sendMessage,
         deleteMessage,
+        sendReaction,
         emitTyping,
         setActiveChat,
         socketRef,

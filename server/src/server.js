@@ -207,7 +207,7 @@ io.on('connection', async (socket) => {
 
   // EVENT: send-message
   socket.on('send-message', async (data) => {
-    const { id, receiverId, text, mediaUrl, mediaType, timestamp, isEncrypted } = data;
+    const { id, receiverId, text, mediaUrl, mediaType, timestamp, isEncrypted, replyTo } = data;
     
     if (!receiverId) return;
 
@@ -219,8 +219,9 @@ io.on('connection', async (socket) => {
       mediaUrl: mediaUrl || null,
       mediaType: mediaType || null,
       timestamp: timestamp || Date.now(),
-      status: 'delivered', // Initial state relayed is single tick (delivered)
-      isEncrypted: isEncrypted || false
+      status: 'delivered',
+      isEncrypted: isEncrypted || false,
+      replyTo: replyTo || null
     };
 
     const receiverSocketId = onlineUsers.get(receiverId);
@@ -260,6 +261,15 @@ io.on('connection', async (socket) => {
 
       // Return "delivered" (single tick) because it is safely buffered in server Redis/Memory
       socket.emit('message-status', { id, status: 'delivered' });
+    }
+  });
+
+  // EVENT: send-reaction (relay emoji reaction to other user)
+  socket.on('send-reaction', ({ messageId, recipientId, emoji }) => {
+    if (!messageId || !recipientId || !emoji) return;
+    const receiverSocketId = onlineUsers.get(recipientId);
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit('receive-reaction', { messageId, emoji, senderId: userId });
     }
   });
 
