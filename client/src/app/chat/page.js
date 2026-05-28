@@ -121,83 +121,118 @@ const renderUsername = (username, textStyle = {}) => {
 const MessageInputBar = React.memo(({ onSendMessage, pendingMedia, uploading, fileInputRef, triggerFileSelector, handleFileUpload, emitTyping, activeFriendId, replyingTo, onCancelReply }) => {
   const [inputText, setInputText] = useState('');
   const typingTimeoutRef = useRef(null);
+  const inputRef = useRef(null);
+
+  // Auto-focus input and scroll into view when replying
+  useEffect(() => {
+    if (replyingTo && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [replyingTo]);
+
+  // Escape key cancels reply
+  useEffect(() => {
+    const handleEsc = (e) => { if (e.key === 'Escape' && replyingTo) onCancelReply(); };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [replyingTo, onCancelReply]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     const success = await onSendMessage(inputText);
     if (success !== false) {
       setInputText('');
+      if (inputRef.current) inputRef.current.focus();
     }
   };
 
   const handleKeyDown = (e) => {
-    if (inputText.length === 0) {
-      emitTyping(activeFriendId, true);
-    }
+    if (inputText.length === 0) emitTyping(activeFriendId, true);
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(() => {
-      emitTyping(activeFriendId, false);
-    }, 2000);
+    typingTimeoutRef.current = setTimeout(() => emitTyping(activeFriendId, false), 2000);
   };
 
   return (
     <div className="w-full">
+      {/* Reply bar — animates in */}
       {replyingTo && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', margin: '0 0 6px', background: 'var(--surface)', borderRadius: '12px', border: '1px solid var(--border-light)', borderLeft: '3px solid var(--primary)' }}>
-          <Reply style={{ width: '13px', height: '13px', color: 'var(--primary)', flexShrink: 0 }} />
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '10px',
+          padding: '8px 14px', marginBottom: '8px',
+          background: 'var(--surface)', borderRadius: '14px',
+          border: '1px solid var(--border-light)',
+          borderLeft: '3px solid var(--primary)',
+          animation: 'slideUp 0.15s ease-out',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+        }}>
+          <Reply style={{ width: '14px', height: '14px', color: 'var(--primary)', flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontSize: '10px', fontWeight: 700, color: 'var(--primary)', margin: 0, fontFamily: 'var(--font-jakarta)' }}>
-              {replyingTo.senderId === replyingTo._selfId ? 'Replying to yourself' : 'Replying'}
+            <p style={{ fontSize: '10px', fontWeight: 800, color: 'var(--primary)', margin: '0 0 1px', fontFamily: 'var(--font-jakarta)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              {replyingTo.senderId === replyingTo._selfId ? 'You' : 'Replying'}
             </p>
-            <p style={{ fontSize: '11px', color: 'var(--text-subtle)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <p style={{ fontSize: '12px', color: 'var(--text)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', opacity: 0.75 }}>
               {replyingTo.text || '📎 Attachment'}
             </p>
           </div>
-          <button type="button" onClick={onCancelReply} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: 'var(--text-subtle)', flexShrink: 0 }}>
-            <X style={{ width: '13px', height: '13px' }} />
+          <button
+            type="button"
+            onClick={onCancelReply}
+            style={{ background: 'var(--border-light)', border: 'none', cursor: 'pointer', padding: '4px', color: 'var(--text-muted)', flexShrink: 0, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px' }}
+            title="Cancel reply (Esc)"
+          >
+            <X style={{ width: '11px', height: '11px' }} />
           </button>
         </div>
       )}
-    <form onSubmit={handleSubmit} className="flex items-center gap-4">
-      <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*,video/*,application/*" />
 
-      <button
-        type="button"
-        onClick={triggerFileSelector}
-        disabled={uploading}
-        className="p-3.5 rounded-full transition-colors shrink-0"
-        style={{ color: 'var(--text-muted)' }}
-        onMouseEnter={e => e.currentTarget.style.background = 'var(--border-light)'}
-        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-      >
-        <Paperclip className="w-5 h-5" />
-      </button>
+      <form onSubmit={handleSubmit} className="flex items-center gap-4">
+        <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*,video/*,application/*" />
 
-      <input
-        type="text"
-        placeholder="Type a message..."
-        value={inputText}
-        onChange={e => setInputText(e.target.value)}
-        onKeyDown={handleKeyDown}
-        className="msg-field"
-      />
+        <button
+          type="button"
+          onClick={triggerFileSelector}
+          disabled={uploading}
+          className="p-3.5 rounded-full transition-colors shrink-0"
+          style={{ color: 'var(--text-muted)' }}
+          onMouseEnter={e => e.currentTarget.style.background = 'var(--border-light)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+        >
+          <Paperclip className="w-5 h-5" />
+        </button>
 
-      <button
-        type="submit"
-        disabled={!inputText.trim() && !pendingMedia}
-        className="w-11 h-11 rounded-full text-white shrink-0 flex items-center justify-center transition-all disabled:opacity-40 disabled:pointer-events-none hover:scale-105 active:scale-95 shadow-md border-none cursor-pointer"
-        style={{ 
-          background: 'linear-gradient(135deg, var(--primary) 0%, #4a5cf6 100%)',
-          boxShadow: '0 4px 12px rgba(26, 115, 232, 0.25)'
-        }}
-      >
-        <Send className="w-5 h-5" style={{ transform: 'rotate(-15deg) translate(1px, -1px)' }} />
-      </button>
-    </form>
+        <input
+          ref={inputRef}
+          type="text"
+          placeholder={replyingTo ? 'Type your reply...' : 'Type a message...'}
+          value={inputText}
+          onChange={e => setInputText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          className="msg-field"
+          style={replyingTo ? { borderColor: 'var(--primary)', boxShadow: '0 0 0 2px rgba(99,102,241,0.15)' } : {}}
+        />
+
+        <button
+          type="submit"
+          disabled={!inputText.trim() && !pendingMedia}
+          className="w-11 h-11 rounded-full text-white shrink-0 flex items-center justify-center transition-all disabled:opacity-40 disabled:pointer-events-none hover:scale-105 active:scale-95 shadow-md border-none cursor-pointer"
+          style={{
+            background: replyingTo
+              ? 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)'
+              : 'linear-gradient(135deg, var(--primary) 0%, #4a5cf6 100%)',
+            boxShadow: replyingTo
+              ? '0 4px 12px rgba(99,102,241,0.35)'
+              : '0 4px 12px rgba(26,115,232,0.25)'
+          }}
+        >
+          <Send className="w-5 h-5" style={{ transform: 'rotate(-15deg) translate(1px, -1px)' }} />
+        </button>
+      </form>
     </div>
   );
 });
 MessageInputBar.displayName = 'MessageInputBar';
+
 
 export default function ChatPage() {
   const router = useRouter();
