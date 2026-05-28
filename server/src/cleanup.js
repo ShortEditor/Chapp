@@ -11,6 +11,18 @@ const UPLOADS_DIR = path.resolve('uploads');
  */
 export async function purgeOldMedia() {
   console.log('🧹 [Cleanup] Scanning uploads folder for expired media...');
+
+  // Purge expired stories from database
+  try {
+    const deletedStories = await prisma.story.deleteMany({
+      where: { expiresAt: { lt: new Date() } }
+    });
+    if (deletedStories.count > 0) {
+      console.log(`🗑️ [Cleanup] Purged ${deletedStories.count} expired story record(s) from database.`);
+    }
+  } catch (err) {
+    console.error('⚠️ [Cleanup] Could not purge expired stories:', err.message);
+  }
   
   if (!fs.existsSync(UPLOADS_DIR)) {
     fs.mkdirSync(UPLOADS_DIR, { recursive: true });

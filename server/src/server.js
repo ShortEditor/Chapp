@@ -1551,6 +1551,115 @@ app.get('/api/media/download/:filename', (req, res) => {
   }
 });
 
+// ─── STORIES REST API ──────────────────────────────────────────────────────────
+
+// POST /api/stories — post a new story (expires in 24 hours)
+app.post('/api/stories', authenticateToken, async (req, res) => {
+  const { mediaUrl, mediaType, caption } = req.body;
+  if (!mediaUrl) {
+    return res.status(400).json({ error: 'Media URL is required' });
+  }
+  const type = mediaType || 'image'; // 'image' | 'video' | 'text'
+  
+  try {
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    const story = await prisma.story.create({
+      data: {
+        userId: req.user.id,
+        mediaUrl,
+        mediaType: type,
+        caption: caption || null,
+        expiresAt
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            avatar: true
+          }
+        }
+      }
+    });
+
+    console.log(`🖼️ [Stories] Story created by user ${req.user.username}`);
+    res.status(201).json(story);
+  } catch (err) {
+    console.error('❌ [Stories] Create error:', err.message);
+    res.status(500).json({ error: 'Failed to post story' });
+  }
+});
+
+// GET /api/stories — fetch active stories for user and all their friends
+app.get('/api/stories', authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+  try {
+    // 1. Get all accepted friends
+    const friendships = await prisma.friendship.findMany({
+      where: {
+        OR: [
+          { senderId: userId, status: 'ACCEPTED' },
+          { receiverId: userId, status: 'ACCEPTED' }
+        ]
+      }
+    });
+
+    const friendIds = friendships.map(f => f.senderId === userId ? f.receiverId : f.senderId);
+    const allIds = [userId, ...friendIds];
+
+    // 2. Fetch unexpired stories
+    const stories = await prisma.story.findMany({
+      where: {
+        userId: { in: allIds },
+        expiresAt: { gt: new Date() }
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            avatar: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'asc'
+      }
+    });
+
+    res.json(stories);
+  } catch (err) {
+    console.error('❌ [Stories] Fetch error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch stories' });
+  }
+});
+
+// DELETE /api/stories/:id — delete a story (creator only)
+app.delete('/api/stories/:id', authenticateToken, async (req, res) => {
+  try {
+    const story = await prisma.story.findUnique({
+      where: { id: req.params.id }
+    });
+
+    if (!story) {
+      return res.status(404).json({ error: 'Story not found' });
+    }
+
+    if (story.userId !== req.user.id) {
+      return res.status(403).json({ error: 'Not authorized to delete this story' });
+    }
+
+    await prisma.story.delete({
+      where: { id: req.params.id }
+    });
+
+    res.json({ success: true, message: 'Story deleted' });
+  } catch (err) {
+    console.error('❌ [Stories] Delete error:', err.message);
+    res.status(500).json({ error: 'Failed to delete story' });
+  }
+});
+
 // ─── GROUPS REST API ──────────────────────────────────────────────────────────
 
 // POST /api/groups — create a group, creator auto-joined as admin

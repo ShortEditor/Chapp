@@ -34,6 +34,7 @@ model User {
   receivedRequests Friendship[] @relation("ReceivedFriendships")
   groupsCreated    Group[]      @relation("GroupsCreated")
   groupMemberships GroupMember[]
+  stories          Story[]      @relation("UserStories")
 }
 
 model Friendship {
@@ -73,3 +74,16 @@ model GroupMember {
 
   @@unique([groupId, userId])
 }
+
+model Story {
+  id        String   @id @default(uuid())
+  userId    String
+  mediaUrl  String
+  mediaType String   // "image" | "video" | "text"
+  caption   String?
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  user      User     @relation("UserStories", fields: [userId], references: [id], onDelete: Cascade)
+}
+

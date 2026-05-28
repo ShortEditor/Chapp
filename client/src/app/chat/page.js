@@ -12,6 +12,8 @@ import {
   Smile,
   LogOut,
   UserPlus,
+  Camera,
+  Eye,
   Settings,
   MessageSquare,
   Users,
@@ -156,7 +158,7 @@ const MOCK_GIFS = [
   }
 ];
 
-const MessageInputBar = React.memo(({ onSendMessage, pendingMedia, uploading, fileInputRef, triggerFileSelector, handleFileUpload, emitTyping, activeFriendId, replyingTo, onCancelReply, onSendGif }) => {
+const MessageInputBar = React.memo(({ onSendMessage, pendingMedia, uploading, fileInputRef, triggerFileSelector, handleFileUpload, emitTyping, activeFriendId, replyingTo, onCancelReply, onSendGif, isSnapMode, setIsSnapMode }) => {
   const [inputText, setInputText] = useState('');
   const typingTimeoutRef = useRef(null);
   const inputRef = useRef(null);
@@ -385,6 +387,25 @@ const MessageInputBar = React.memo(({ onSendMessage, pendingMedia, uploading, fi
             <Paperclip className="w-5 h-5" />
           </button>
 
+          {/* Snap Mode Toggle */}
+          <button
+            type="button"
+            onClick={() => setIsSnapMode(!isSnapMode)}
+            className="p-2 md:p-3 rounded-full transition-all duration-300 flex items-center justify-center"
+            style={{
+              color: isSnapMode ? '#f5576c' : 'var(--text-muted)',
+              background: isSnapMode ? 'rgba(245, 87, 108, 0.15)' : 'transparent',
+              boxShadow: isSnapMode ? '0 0 10px rgba(245, 87, 108, 0.3)' : 'none',
+              border: isSnapMode ? '1.5px solid rgba(245, 87, 108, 0.4)' : '1px solid transparent',
+              cursor: 'pointer',
+              width: '38px',
+              height: '38px'
+            }}
+            title={isSnapMode ? "Snap Mode Active (Media will self-destruct upon viewing)" : "Enable Snap Mode"}
+          >
+            <Camera className="w-5 h-5" />
+          </button>
+
           <button
             type="button"
             onClick={() => setIsGifPickerOpen(!isGifPickerOpen)}
@@ -544,17 +565,28 @@ export default function ChatPage() {
 
   // Message delete (unsend) states
   const [deleteTarget, setDeleteTarget] = useState(null); // { id, senderId, receiverId }
-  const longPressTimerRef = useRef(null);
-  const touchData = useRef({ startX: 0, startY: 0, isHorizontal: null });
 
+  // Temporary Stories & Self-destructing Snaps states
+  const [stories, setStories] = useState([]);
+  const [isPostingStory, setIsPostingStory] = useState(false);
+  const [activeStoryGroup, setActiveStoryGroup] = useState(null); // { username, avatar, stories: [] }
+  const [storyProgress, setStoryProgress] = useState(0);
+  const [currentStoryIndex, setCurrentStoryIndex] = useState(0);
+  const [storyCaption, setStoryCaption] = useState('');
+  const [storyFile, setStoryFile] = useState(null);
+  const [isUploadingStory, setIsUploadingStory] = useState(false);
+  
+  // Snap Self-destruction View states
+  const [activeSnap, setActiveSnap] = useState(null); // { id, url, senderId, receiverId }
+  const [snapCountdown, setSnapCountdown] = useState(10);
+  const [isSnapMode, setIsSnapMode] = useState(false); // Snap toggle on message input
+
+  const touchData = useRef({ startX: 0, startY: 0, isHorizontal: null });
+  const longPressTimerRef = useRef(null);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
-
   const lastChatIdRef = useRef(null);
 
-  // -------------------------------------------------------------
-  // DEXIE REACTIVE QUERIES
-  // -------------------------------------------------------------
   const dbChats = useLiveQuery(
     () => db.chats.orderBy('lastMessageTime').reverse().toArray()
   ) || [];
@@ -571,7 +603,6 @@ export default function ChatPage() {
     () => activeFriend ? db.messages.where('chatId').equals(activeFriend.id).sortBy('timestamp') : Promise.resolve([]),
     [activeFriend]
   ) || [];
-
 
   // -------------------------------------------------------------
   // INITIALIZATION & SYNC EFFECTS
@@ -1736,6 +1767,245 @@ export default function ChatPage() {
     }
   };
 
+  // ─── STORIES & SNAPS TEMPORARY FEATURES ───
+
+  // Fetch active stories from backend
+  const fetchActiveStories = async () => {
+    const token = localStorage.getItem('chapp_token');
+    if (!token) return;
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/stories`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        // Group stories by userId so we can display them together
+        const grouped = {};
+        data.forEach(story => {
+          const uid = story.userId;
+          if (!grouped[uid]) {
+            grouped[uid] = {
+              userId: uid,
+              username: story.user?.username || 'Unknown',
+              avatar: story.user?.avatar || null,
+              items: []
+            };
+          }
+          grouped[uid].items.push(story);
+        });
+        setStories(Object.values(grouped));
+      }
+    } catch (err) {
+      console.error('❌ Error fetching stories:', err);
+    }
+  };
+
+  // Run fetch stories periodically (e.g. every 60 seconds)
+  useEffect(() => {
+    fetchActiveStories();
+    const interval = setInterval(fetchActiveStories, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Post a new story (signed Cloudinary uploader with fallbacks)
+  const handlePostStory = async (e) => {
+    e.preventDefault();
+    if (!storyFile) return;
+
+    setIsUploadingStory(true);
+    const token = localStorage.getItem('chapp_token');
+
+    let imageUrl = null;
+    let mediaType = storyFile.type.startsWith('video/') ? 'video' : 'image';
+
+    // Layer 1: Secure Signed Cloudinary Upload
+    try {
+      console.log('☁️ [Cloudinary] Uploading story via secure signature...');
+      if (!token) throw new Error('Not authenticated');
+
+      const signRes = await fetch(`${BACKEND_URL}/api/cloudinary/sign`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ folder: 'stories' })
+      });
+
+      if (signRes.ok) {
+        const signData = await signRes.json();
+        const { signature, timestamp, folder, apiKey, cloudName } = signData;
+
+        const formData = new FormData();
+        formData.append('file', storyFile);
+        formData.append('api_key', apiKey);
+        formData.append('timestamp', timestamp);
+        formData.append('signature', signature);
+        formData.append('folder', folder);
+
+        const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`, {
+          method: 'POST',
+          body: formData
+        });
+
+        if (uploadRes.ok) {
+          const uploadData = await uploadRes.json();
+          imageUrl = uploadData.secure_url;
+          mediaType = uploadData.resource_type === 'image' ? 'image' : uploadData.resource_type === 'video' ? 'video' : 'image';
+        }
+      }
+    } catch (err) {
+      console.warn('☁️ [Cloudinary] Story Layer 1 failed:', err.message);
+    }
+
+    // Layer 2: Unsigned Cloudinary Upload (Fallback)
+    if (!imageUrl) {
+      try {
+        console.log('☁️ [Cloudinary] Story Layer 2 fallback...');
+        const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'dlw5v5zot';
+        const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'avatar_preset';
+
+        const formData = new FormData();
+        formData.append('file', storyFile);
+        formData.append('upload_preset', uploadPreset);
+
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`, {
+          method: 'POST',
+          body: formData
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          imageUrl = data.secure_url;
+          mediaType = data.resource_type === 'image' ? 'image' : data.resource_type === 'video' ? 'video' : 'image';
+        }
+      } catch (err) {
+        console.warn('☁️ [Cloudinary] Story Layer 2 failed:', err.message);
+      }
+    }
+
+    // Layer 3: Self-Hosted Server Fallback
+    if (!imageUrl) {
+      try {
+        console.log('💻 [Server] Story Layer 3 fallback...');
+        if (!token) throw new Error('Not authenticated');
+
+        const formData = new FormData();
+        formData.append('file', storyFile);
+
+        const response = await fetch(`${BACKEND_URL}/api/media/upload`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          imageUrl = data.url;
+          mediaType = data.mediaType;
+        }
+      } catch (err) {
+        console.error('❌ Story upload failed:', err.message);
+      }
+    }
+
+    if (!imageUrl) {
+      alert('Failed to upload story file');
+      setIsUploadingStory(false);
+      return;
+    }
+
+    // Call POST /api/stories to create story entry
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/stories`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          mediaUrl: imageUrl,
+          mediaType,
+          caption: storyCaption
+        })
+      });
+
+      if (res.ok) {
+        setStoryFile(null);
+        setStoryCaption('');
+        setIsPostingStory(false);
+        fetchActiveStories();
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to post story');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error creating story: ' + err.message);
+    } finally {
+      setIsUploadingStory(false);
+    }
+  };
+
+  // Story Viewer Modal Progress Effect
+  useEffect(() => {
+    if (!activeStoryGroup) {
+      setStoryProgress(0);
+      return;
+    }
+
+    const duration = 5000; // 5s per story
+    const step = 50; // Update progress every 50ms
+    const totalSteps = duration / step;
+    
+    setStoryProgress(0);
+    let currentStep = 0;
+
+    const timer = setInterval(() => {
+      currentStep++;
+      setStoryProgress((currentStep / totalSteps) * 100);
+
+      if (currentStep >= totalSteps) {
+        clearInterval(timer);
+        if (currentStoryIndex < activeStoryGroup.items.length - 1) {
+          setCurrentStoryIndex(prev => prev + 1);
+        } else {
+          setActiveStoryGroup(null);
+          setCurrentStoryIndex(0);
+        }
+      }
+    }, step);
+
+    return () => clearInterval(timer);
+  }, [activeStoryGroup, currentStoryIndex]);
+
+  // Snap Expiry and Deletion Handler
+  const handleSnapExpiry = async (snap) => {
+    setActiveSnap(null);
+    const recipientId = snap.senderId === currentUser?.id ? snap.receiverId : snap.senderId;
+    await deleteMessage(snap.id, recipientId);
+  };
+
+  // Snap Viewer Modal countdown effect
+  useEffect(() => {
+    if (!activeSnap) return;
+
+    setSnapCountdown(10); // 10 seconds viewer window
+
+    const timer = setInterval(() => {
+      setSnapCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          handleSnapExpiry(activeSnap);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [activeSnap]);
+
   // -------------------------------------------------------------
   // MESSAGING CORE LOGIC
   // -------------------------------------------------------------
@@ -1745,12 +2015,17 @@ export default function ChatPage() {
     setSendError('');
     let result = null;
 
+    let mediaTypeToSend = pendingMedia?.type || null;
+    if (isSnapMode && pendingMedia) {
+      mediaTypeToSend = 'snap';
+    }
+
     if (activeFriend.isGroup) {
       result = await sendGroupMessage(
         activeFriend.id,
         text.trim(),
         pendingMedia?.url || null,
-        pendingMedia?.type || null,
+        mediaTypeToSend,
         replyingTo ? { id: replyingTo.id, text: replyingTo.text, senderId: replyingTo.senderId } : null
       );
     } else {
@@ -1758,7 +2033,7 @@ export default function ChatPage() {
         activeFriend.id,
         text.trim(),
         pendingMedia?.url || null,
-        pendingMedia?.type || null,
+        mediaTypeToSend,
         replyingTo ? { id: replyingTo.id, text: replyingTo.text, senderId: replyingTo.senderId } : null
       );
     }
@@ -1769,6 +2044,7 @@ export default function ChatPage() {
       return false;
     }
 
+    setIsSnapMode(false); // Reset snap mode after sending
     setPendingMedia(null);
     setReplyingTo(null);
     if (!activeFriend.isGroup) {
@@ -2035,6 +2311,89 @@ export default function ChatPage() {
           {/* ── CHATS TAB ── */}
           {activeTab === 'chats' && (
             <div className="p-3 space-y-3">
+              {/* Stories Bar */}
+              {(() => {
+                const myStoryGroup = stories.find(g => g.userId === currentUser?.id);
+                return (
+                  <div className="flex gap-3 overflow-x-auto py-1 px-0.5 scrollbar-hide border-b border-slate-800/40 pb-3" style={{ WebkitOverflowScrolling: 'touch', msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
+                    {/* My Story circle */}
+                    <div className="flex flex-col items-center flex-shrink-0 cursor-pointer" style={{ width: '60px' }}>
+                      <div 
+                        className="relative w-12 h-12 rounded-full flex items-center justify-center transition-transform hover:scale-105"
+                        onClick={() => {
+                          if (myStoryGroup) {
+                            setActiveStoryGroup(myStoryGroup);
+                            setCurrentStoryIndex(0);
+                          } else {
+                            setIsPostingStory(true);
+                          }
+                        }}
+                        style={{
+                          padding: myStoryGroup ? '2px' : '0px',
+                          background: myStoryGroup ? 'linear-gradient(45deg, #2196F3 0%, #00BCD4 100%)' : 'transparent',
+                        }}
+                      >
+                        <div className="w-full h-full rounded-full bg-slate-950 p-[2px] flex items-center justify-center">
+                          {currentUser?.avatar ? (
+                            <img src={optimizeAvatarUrl(currentUser.avatar)} className="w-full h-full rounded-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full rounded-full bg-slate-850 flex items-center justify-center text-xs font-bold text-white">
+                              {currentUser?.username?.slice(0, 2).toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+                        <div 
+                          className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center border-2 border-slate-900 text-white font-bold cursor-pointer hover:bg-blue-600 transition-colors" 
+                          style={{ fontSize: '12px' }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsPostingStory(true);
+                          }}
+                        >
+                          +
+                        </div>
+                      </div>
+                      <span className="text-xs mt-1 truncate w-full text-center text-slate-400" style={{ fontSize: '10px' }}>My Story</span>
+                    </div>
+
+                    {/* Friends' Stories */}
+                    {stories.map(group => {
+                      if (group.userId === currentUser?.id) return null;
+                      return (
+                        <div
+                          key={group.userId}
+                          className="flex flex-col items-center flex-shrink-0 cursor-pointer animate-fadeIn"
+                          onClick={() => {
+                            setActiveStoryGroup(group);
+                            setCurrentStoryIndex(0);
+                          }}
+                          style={{ width: '60px' }}
+                        >
+                          <div 
+                            className="w-12 h-12 rounded-full p-[2px] flex items-center justify-center transition-all duration-300 hover:scale-105"
+                            style={{
+                              background: 'linear-gradient(45deg, #f093fb 0%, #f5576c 100%)',
+                              boxShadow: '0 0 12px rgba(245, 87, 108, 0.2)'
+                            }}
+                          >
+                            <div className="w-full h-full rounded-full bg-slate-950 p-[2px] flex items-center justify-center">
+                              {group.avatar ? (
+                                <img src={optimizeAvatarUrl(group.avatar)} className="w-full h-full rounded-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-white">
+                                  {group.username.slice(0, 2).toUpperCase()}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <span className="text-xs mt-1 truncate w-full text-center text-slate-400" style={{ fontSize: '10px' }}>{group.username}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
               {/* Search Bar */}
               <div className="relative">
                 <input
@@ -3348,6 +3707,36 @@ export default function ChatPage() {
                         {/* Media */}
                         {msg.mediaUrl && (
                           <div style={{ borderRadius: '12px', overflow: 'hidden', margin: msg.text ? '0 0 0 0' : '0' }}>
+                            {msg.mediaType === 'snap' && (
+                              <div
+                                onClick={() => {
+                                  if (!isMe) {
+                                    setActiveSnap({ id: msg.id, url: msg.mediaUrl, senderId: msg.senderId });
+                                  } else {
+                                    alert("This is a self-destructing Snap sent by you. Only the recipient can view it.");
+                                  }
+                                }}
+                                className="flex items-center gap-3 p-3 m-1 rounded-xl cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all select-none"
+                                style={{
+                                  background: 'linear-gradient(135deg, #f5576c 0%, #f093fb 100%)',
+                                  boxShadow: '0 4px 15px rgba(245, 87, 108, 0.25)',
+                                  color: '#fff',
+                                }}
+                              >
+                                <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center animate-pulse">
+                                  <Camera className="w-5 h-5 text-white" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-bold text-xs uppercase tracking-wider" style={{ fontSize: '10px' }}>
+                                    {isMe ? 'Sent Snap' : 'Received Snap'}
+                                  </div>
+                                  <div className="text-xs opacity-90 truncate" style={{ fontSize: '11px' }}>
+                                    {isMe ? 'Waiting for friend to view' : 'Tap to view (10s limit)'}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
                             {msg.mediaType === 'image' && (
                               <div style={{ position: 'relative' }} className="group">
                                 <img
@@ -3369,7 +3758,7 @@ export default function ChatPage() {
                             {msg.mediaType === 'video' && (
                               <video src={ensureSecureUrl(msg.mediaUrl)} controls style={{ maxHeight: '240px', width: '100%', borderRadius: '12px', display: 'block' }} />
                             )}
-                            {msg.mediaType !== 'image' && msg.mediaType !== 'video' && (
+                            {msg.mediaType !== 'image' && msg.mediaType !== 'video' && msg.mediaType !== 'snap' && (
                               <div
                                 style={{
                                   display: 'flex',
@@ -3664,6 +4053,8 @@ export default function ChatPage() {
                 replyingTo={replyingTo}
                 onCancelReply={() => setReplyingTo(null)}
                 onSendGif={onSendGif}
+                isSnapMode={isSnapMode}
+                setIsSnapMode={setIsSnapMode}
               />
             </div>
           </>
@@ -4039,6 +4430,271 @@ export default function ChatPage() {
                 border: '1px solid rgba(255,255,255,0.15)'
               }}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Story Creator Modal */}
+      {isPostingStory && (
+        <div 
+          className="modal-overlay animate-fade-in"
+          style={{
+            zIndex: 10010,
+            background: 'rgba(10, 11, 14, 0.85)',
+            backdropFilter: 'blur(12px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+          }}
+          onClick={() => {
+            if (!isUploadingStory) setIsPostingStory(false);
+          }}
+        >
+          <div 
+            className="animate-zoom-in p-6 rounded-2xl w-full max-w-md border border-slate-800"
+            style={{
+              background: '#0f111a',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-5">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-pink-500" /> Share a Story
+              </h3>
+              <button 
+                disabled={isUploadingStory}
+                onClick={() => setIsPostingStory(false)}
+                className="p-1 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white border-none bg-transparent cursor-pointer disabled:opacity-50"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handlePostStory} className="space-y-4">
+              <div className="border-2 border-dashed border-slate-800 rounded-xl p-6 text-center hover:border-pink-500/50 transition-colors relative cursor-pointer group">
+                <input 
+                  type="file" 
+                  accept="image/*,video/*" 
+                  required
+                  disabled={isUploadingStory}
+                  onChange={(e) => setStoryFile(e.target.files?.[0] || null)}
+                  className="absolute inset-0 opacity-0 cursor-pointer"
+                />
+                <Camera className="w-10 h-10 mx-auto text-slate-500 group-hover:text-pink-500 transition-colors mb-2" />
+                {storyFile ? (
+                  <div className="text-sm font-semibold text-pink-400 truncate">
+                    Selected: {storyFile.name}
+                  </div>
+                ) : (
+                  <div>
+                    <div className="text-sm font-semibold text-slate-300">Choose Image or Video</div>
+                    <div className="text-xs text-slate-500 mt-1">Files last for 24 hours</div>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Caption</label>
+                <input 
+                  type="text"
+                  placeholder="What's on your mind?..."
+                  value={storyCaption}
+                  disabled={isUploadingStory}
+                  onChange={(e) => setStoryCaption(e.target.value)}
+                  className="msg-field w-full"
+                  style={{ borderRadius: '10px', height: '42px', background: '#07080d' }}
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={!storyFile || isUploadingStory}
+                className="w-full py-3 rounded-xl font-bold text-white cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none"
+                style={{
+                  background: 'linear-gradient(135deg, #f5576c 0%, #f093fb 100%)',
+                  boxShadow: '0 4px 15px rgba(245, 87, 108, 0.3)'
+                }}
+              >
+                {isUploadingStory ? 'Uploading Story...' : 'Post to My Story'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Story Viewer Modal */}
+      {activeStoryGroup && (
+        <div 
+          className="modal-overlay animate-fade-in"
+          style={{
+            zIndex: 10020,
+            background: 'rgba(5, 6, 8, 0.98)',
+            backdropFilter: 'blur(20px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+          }}
+          onClick={() => setActiveStoryGroup(null)}
+        >
+          <div 
+            className="relative w-full max-w-lg h-full max-h-[85vh] md:max-h-[90vh] flex flex-col items-center justify-between"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Top Navigation & Progress */}
+            <div className="w-full p-4 absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/85 to-transparent">
+              {/* Progress Bars */}
+              <div className="flex gap-1.5 mb-4">
+                {activeStoryGroup.items.map((item, idx) => {
+                  let width = '0%';
+                  if (idx < currentStoryIndex) width = '100%';
+                  else if (idx === currentStoryIndex) width = `${storyProgress}%`;
+                  return (
+                    <div key={item.id} className="flex-1 h-1 bg-white/20 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-white transition-all ease-linear" 
+                        style={{ width, duration: '50ms' }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* User Metadata */}
+              <div className="flex items-center justify-between text-white">
+                <div className="flex items-center gap-3">
+                  {activeStoryGroup.avatar ? (
+                    <img src={optimizeAvatarUrl(activeStoryGroup.avatar)} className="w-10 h-10 rounded-full object-cover border border-white/20" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center font-bold text-sm text-white">
+                      {activeStoryGroup.username.slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
+                  <div>
+                    <div className="font-bold text-sm text-slate-200">{activeStoryGroup.username}</div>
+                    <div className="text-xs text-slate-400">
+                      {new Date(activeStoryGroup.items[currentStoryIndex]?.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={() => setActiveStoryGroup(null)}
+                  className="p-1.5 rounded-full hover:bg-white/10 text-white border-none bg-transparent cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Media Content */}
+            <div className="flex-1 w-full flex items-center justify-center p-4">
+              {activeStoryGroup.items[currentStoryIndex]?.mediaType === 'video' ? (
+                <video 
+                  src={activeStoryGroup.items[currentStoryIndex]?.mediaUrl} 
+                  autoPlay 
+                  playsInline
+                  style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: '16px' }} 
+                />
+              ) : (
+                <img 
+                  src={activeStoryGroup.items[currentStoryIndex]?.mediaUrl} 
+                  alt="Story content" 
+                  style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: '16px' }}
+                />
+              )}
+            </div>
+
+            {/* Caption & Navigation Controls */}
+            {activeStoryGroup.items[currentStoryIndex]?.caption && (
+              <div className="absolute bottom-16 left-4 right-4 bg-black/60 backdrop-blur-md text-white text-center py-3 px-4 rounded-xl text-sm border border-white/10">
+                {activeStoryGroup.items[currentStoryIndex].caption}
+              </div>
+            )}
+
+            {/* Prev/Next Navigation Overlay Buttons */}
+            <div className="absolute top-1/2 -translate-y-1/2 left-2 right-2 flex justify-between w-[calc(100%-16px)] pointer-events-none">
+              <button 
+                disabled={currentStoryIndex === 0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCurrentStoryIndex(prev => prev - 1);
+                }}
+                className="w-10 h-10 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors pointer-events-auto border-none cursor-pointer disabled:opacity-0 disabled:pointer-events-none"
+              >
+                ‹
+              </button>
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (currentStoryIndex < activeStoryGroup.items.length - 1) {
+                    setCurrentStoryIndex(prev => prev + 1);
+                  } else {
+                    setActiveStoryGroup(null);
+                  }
+                }}
+                className="w-10 h-10 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors pointer-events-auto border-none cursor-pointer"
+              >
+                ›
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Snap Viewer Modal */}
+      {activeSnap && (
+        <div 
+          className="modal-overlay animate-fade-in"
+          style={{
+            zIndex: 10030,
+            background: '#000',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+          }}
+        >
+          {/* Big countdown timer */}
+          <div 
+            className="absolute top-6 right-6 w-14 h-14 rounded-full border-4 border-pink-500 flex items-center justify-center font-bold text-white text-xl bg-black/60 backdrop-blur-md shadow-[0_0_15px_rgba(245,87,108,0.5)] z-20"
+          >
+            {snapCountdown}
+          </div>
+
+          <div className="relative w-full max-w-2xl h-full flex flex-col items-center justify-center p-4">
+            {activeSnap.url.includes('.mp4') || activeSnap.url.includes('video') ? (
+              <video 
+                src={activeSnap.url} 
+                autoPlay 
+                playsInline
+                style={{ maxWidth: '100%', maxHeight: '90vh', objectFit: 'contain', borderRadius: '16px' }}
+              />
+            ) : (
+              <img 
+                src={activeSnap.url} 
+                alt="Self destructing snap"
+                style={{ maxWidth: '100%', maxHeight: '90vh', objectFit: 'contain', borderRadius: '16px' }}
+              />
+            )}
+
+            <div className="absolute bottom-8 text-center text-white/50 text-xs tracking-widest uppercase">
+              ⚠️ Snap will self-destruct in {snapCountdown}s
+            </div>
           </div>
         </div>
       )}
