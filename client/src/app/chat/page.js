@@ -659,6 +659,7 @@ export default function ChatPage() {
   const [cameraStream, setCameraStream] = useState(null);
   const [capturedImage, setCapturedImage] = useState(null);
   const [cameraTarget, setCameraTarget] = useState('snap'); // 'snap' or 'story'
+  const [cameraFacingMode, setCameraFacingMode] = useState('user'); // 'user' or 'environment'
   const cameraVideoRef = useRef(null);
 
   // Story Music states
@@ -1922,13 +1923,19 @@ export default function ChatPage() {
   }, []);
 
   // Camera Webcam capture methods
-  const openCamera = async (target = 'snap') => {
+  const openCamera = async (target = 'snap', forceFacingMode = null) => {
+    const targetFacing = forceFacingMode || cameraFacingMode;
     setCameraTarget(target);
     setCapturedImage(null);
     setIsCameraOpen(true);
+
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 1280, height: 720, facingMode: 'user' },
+        video: { width: 1280, height: 720, facingMode: targetFacing },
         audio: false
       });
       setCameraStream(stream);
@@ -1942,6 +1949,12 @@ export default function ChatPage() {
       alert("Could not access camera. Please check camera permissions in your browser: " + err.message);
       setIsCameraOpen(false);
     }
+  };
+
+  const flipCamera = async () => {
+    const nextFacingMode = cameraFacingMode === 'user' ? 'environment' : 'user';
+    setCameraFacingMode(nextFacingMode);
+    await openCamera(cameraTarget, nextFacingMode);
   };
 
   const closeCamera = () => {
@@ -4818,8 +4831,8 @@ export default function ChatPage() {
           className="modal-overlay animate-fade-in"
           style={{
             zIndex: 10015,
-            background: 'rgba(5, 6, 8, 0.95)',
-            backdropFilter: 'blur(20px)',
+            background: 'rgba(5, 6, 8, 0.98)',
+            backdropFilter: 'blur(30px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -4831,28 +4844,29 @@ export default function ChatPage() {
           }}
         >
           <div 
-            className="animate-zoom-in relative p-6 rounded-2xl w-full max-w-lg border border-slate-800/80 flex flex-col items-center"
+            className="animate-zoom-in relative w-full h-full md:h-auto md:max-w-2xl md:rounded-3xl border-none md:border md:border-slate-800/80 flex flex-col items-center justify-between p-4 md:p-6"
             style={{
-              background: '#0c0d14',
-              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)'
+              background: '#07080c',
+              boxShadow: '0 25px 60px -12px rgba(0,0,0,0.8)'
             }}
           >
-            <div className="w-full flex justify-between items-center mb-4">
-              <h3 className="text-sm font-extrabold tracking-wider uppercase text-pink-500 flex items-center gap-2">
+            {/* Header */}
+            <div className="w-full flex justify-between items-center mb-2 md:mb-4 px-2">
+              <h3 className="text-xs md:text-sm font-extrabold tracking-widest uppercase text-pink-500 flex items-center gap-2">
                 <Camera className="w-4 h-4 text-pink-500 animate-pulse" /> Capture {cameraTarget === 'story' ? 'Story' : 'Snap'}
               </h3>
               <button 
                 onClick={closeCamera}
-                className="p-1.5 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white border-none bg-transparent cursor-pointer"
+                className="p-2 rounded-full hover:bg-slate-800/80 text-slate-400 hover:text-white border-none bg-transparent cursor-pointer transition-all"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Viewfinder / Preview */}
+            {/* Viewfinder / Preview Container */}
             <div 
-              className="relative w-full rounded-2xl overflow-hidden border border-slate-800/60 bg-slate-950 aspect-video flex items-center justify-center shadow-inner"
-              style={{ maxHeight: '55vh' }}
+              className="relative w-full flex-1 md:flex-none rounded-2xl overflow-hidden border border-slate-800/60 bg-slate-950 aspect-[3/4] md:aspect-video flex items-center justify-center shadow-inner"
+              style={{ maxHeight: '72vh', width: '100%' }}
             >
               {!capturedImage ? (
                 <>
@@ -4860,14 +4874,30 @@ export default function ChatPage() {
                     ref={cameraVideoRef} 
                     autoPlay 
                     playsInline 
-                    className="w-full h-full object-cover transform -scale-x-100"
+                    className={`w-full h-full object-cover ${cameraFacingMode === 'user' ? 'transform -scale-x-100' : ''}`}
                   />
-                  <div className="absolute bottom-4 left-0 right-0 flex justify-center">
+                  
+                  {/* Action controls inside viewfinder bottom */}
+                  <div className="absolute bottom-6 left-0 right-0 flex justify-center items-center gap-8 z-10 px-4">
+                    {/* Placeholder on left to keep balance */}
+                    <div className="w-12 h-12" />
+
+                    {/* Main Capture button */}
                     <button
                       onClick={capturePhoto}
-                      className="w-16 h-16 rounded-full border-4 border-white bg-pink-500/20 hover:bg-pink-500/40 active:scale-95 transition-all flex items-center justify-center shadow-[0_0_15px_rgba(245,87,108,0.4)]"
+                      className="w-18 h-18 rounded-full border-4 border-white bg-pink-500/20 hover:bg-pink-500/30 active:scale-90 transition-all flex items-center justify-center shadow-[0_0_20px_rgba(245,87,108,0.5)] cursor-pointer"
                     >
-                      <div className="w-10 h-10 rounded-full bg-pink-500" />
+                      <div className="w-12 h-12 rounded-full bg-pink-500 hover:bg-pink-400 transition-colors" />
+                    </button>
+
+                    {/* Flip Camera button */}
+                    <button
+                      type="button"
+                      onClick={flipCamera}
+                      className="w-12 h-12 rounded-full bg-black/60 hover:bg-black/80 border border-white/20 hover:border-white/40 text-white flex items-center justify-center transition-all cursor-pointer shadow-lg active:scale-90"
+                      title="Flip Camera (Front/Back)"
+                    >
+                      <RefreshCw className="w-5 h-5 text-slate-200 hover:text-white" />
                     </button>
                   </div>
                 </>
@@ -4876,28 +4906,30 @@ export default function ChatPage() {
                   <img 
                     src={capturedImage} 
                     alt="Captured Media" 
-                    className="w-full h-full object-cover transform -scale-x-100" 
+                    className={`w-full h-full object-cover ${cameraFacingMode === 'user' ? 'transform -scale-x-100' : ''}`} 
                   />
-                  <div className="absolute inset-0 bg-black/35 flex items-center justify-center gap-4">
-                    <button 
-                      onClick={() => openCamera(cameraTarget)}
-                      className="px-4 py-2 rounded-xl bg-slate-850 hover:bg-slate-800 border border-slate-700 text-white font-semibold text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-lg"
-                    >
-                      Retake
-                    </button>
-                    <button 
-                      onClick={handleSendCameraMedia}
-                      className="px-6 py-2.5 rounded-xl bg-pink-500 hover:bg-pink-600 text-white font-extrabold text-xs tracking-wider uppercase transition-all flex items-center gap-1.5 cursor-pointer shadow-[0_0_15px_rgba(245,87,108,0.3)] hover:scale-105 active:scale-95"
-                    >
-                      {cameraTarget === 'story' ? 'Edit Story' : 'Send Snap 🚀'}
-                    </button>
+                  <div className="absolute inset-0 bg-black/35 backdrop-blur-[2px] flex flex-col items-center justify-end p-6 gap-4">
+                    <div className="flex gap-4 w-full max-w-sm justify-center mb-2">
+                      <button 
+                        onClick={() => openCamera(cameraTarget)}
+                        className="flex-1 py-3 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/60 text-white font-semibold text-xs tracking-wider uppercase transition-all cursor-pointer shadow-lg active:scale-95 text-center"
+                      >
+                        Retake
+                      </button>
+                      <button 
+                        onClick={handleSendCameraMedia}
+                        className="flex-1 py-3 rounded-xl bg-pink-500 hover:bg-pink-600 text-white font-extrabold text-xs tracking-widest uppercase transition-all cursor-pointer shadow-[0_0_15px_rgba(245,87,108,0.3)] hover:scale-[1.02] active:scale-95 text-center"
+                      >
+                        {cameraTarget === 'story' ? 'Edit Story' : 'Send Snap 🚀'}
+                      </button>
+                    </div>
                   </div>
                 </>
               )}
             </div>
 
-            <p className="text-[10px] text-slate-500 mt-4 text-center">
-              Make sure camera permissions are enabled in your browser settings.
+            <p className="text-[10px] text-slate-500 mt-2 md:mt-4 text-center px-4">
+              Make sure camera permissions are enabled. Mirror mode active for front-facing capture.
             </p>
           </div>
         </div>
