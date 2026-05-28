@@ -286,25 +286,55 @@ const MessageInputBar = React.memo(({ onSendMessage, pendingMedia, uploading, fi
     if (!isGifPickerOpen) return;
 
     const fetchGifs = async () => {
-      const apiKey = process.env.NEXT_PUBLIC_GIPHY_API_KEY || 'dc6zaTOxFJmzC';
+      const apiKey = process.env.NEXT_PUBLIC_GIPHY_API_KEY;
       setLoadingGifs(true);
       try {
-        const url = gifQuery.trim()
-          ? `https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(gifQuery)}&limit=50&rating=pg-13`
-          : `https://api.giphy.com/v1/gifs/trending?api_key=${apiKey}&limit=50&rating=pg-13`;
-        const res = await fetch(url);
-        if (res.ok) {
-          const data = await res.json();
-          const mapped = (data.data || []).map(g => ({
-            preview: g.images?.fixed_width_downsampled?.url || g.images?.fixed_width?.url || g.images?.original?.url,
-            url: g.images?.original?.url
-          }));
-          setGifs(mapped.length > 0 ? mapped : MOCK_GIFS);
-        } else {
-          setGifs(MOCK_GIFS);
+        let mapped = [];
+        
+        // 1. Try custom Giphy API key if provided
+        if (apiKey) {
+          try {
+            const url = gifQuery.trim()
+              ? `https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(gifQuery)}&limit=50&rating=pg-13`
+              : `https://api.giphy.com/v1/gifs/trending?api_key=${apiKey}&limit=50&rating=pg-13`;
+            const res = await fetch(url);
+            if (res.ok) {
+              const data = await res.json();
+              mapped = (data.data || []).map(g => ({
+                preview: g.images?.fixed_width_downsampled?.url || g.images?.fixed_width?.url || g.images?.original?.url,
+                url: g.images?.original?.url
+              }));
+            }
+          } catch (giphyErr) {
+            console.warn("Giphy fetch failed, using Tenor fallback:", giphyErr);
+          }
         }
+        
+        // 2. If Giphy was not queried, failed, or returned empty, query Tenor with their robust public key!
+        if (mapped.length === 0) {
+          try {
+            const q = gifQuery.trim() ? encodeURIComponent(gifQuery) : 'trending';
+            const tenorUrl = `https://g.tenor.com/v1/search?q=${q}&key=LIVDSRZULELA&limit=50`;
+            const res = await fetch(tenorUrl);
+            if (res.ok) {
+              const data = await res.json();
+              mapped = (data.results || []).map(g => {
+                const media = g.media?.[0];
+                return {
+                  preview: media?.tinygif?.url || media?.gif?.url,
+                  url: media?.gif?.url
+                };
+              });
+            }
+          } catch (tenorErr) {
+            console.warn("Tenor fetch failed:", tenorErr);
+          }
+        }
+        
+        // 3. Fallback to static mocks if all network queries fail
+        setGifs(mapped.length > 0 ? mapped : MOCK_GIFS);
       } catch (err) {
-        console.error("Giphy fetch error:", err);
+        console.error("GIF fetch error:", err);
         setGifs(MOCK_GIFS);
       } finally {
         setLoadingGifs(false);
