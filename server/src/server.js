@@ -1555,7 +1555,7 @@ app.get('/api/media/download/:filename', (req, res) => {
 
 // POST /api/stories — post a new story (expires in 24 hours)
 app.post('/api/stories', authenticateToken, async (req, res) => {
-  const { mediaUrl, mediaType, caption } = req.body;
+  const { mediaUrl, mediaType, caption, musicUrl, musicTitle } = req.body;
   if (!mediaUrl) {
     return res.status(400).json({ error: 'Media URL is required' });
   }
@@ -1569,6 +1569,8 @@ app.post('/api/stories', authenticateToken, async (req, res) => {
         mediaUrl,
         mediaType: type,
         caption: caption || null,
+        musicUrl: musicUrl || null,
+        musicTitle: musicTitle || null,
         expiresAt
       },
       include: {
@@ -1583,6 +1585,32 @@ app.post('/api/stories', authenticateToken, async (req, res) => {
     });
 
     console.log(`🖼️ [Stories] Story created by user ${req.user.username}`);
+
+    // Notify online friends in real-time
+    try {
+      const friendships = await prisma.friendship.findMany({
+        where: {
+          OR: [
+            { senderId: req.user.id, status: 'ACCEPTED' },
+            { receiverId: req.user.id, status: 'ACCEPTED' }
+          ]
+        }
+      });
+      const friendIds = friendships.map(f => f.senderId === req.user.id ? f.receiverId : f.senderId);
+      friendIds.forEach(fid => {
+        const socketId = onlineUsers.get(fid);
+        if (socketId) {
+          io.to(socketId).emit('story-posted', {
+            userId: req.user.id,
+            username: req.user.username,
+            avatar: req.user.avatar
+          });
+        }
+      });
+    } catch (sockErr) {
+      console.warn('⚠️ [Stories] Could not notify friends via socket:', sockErr.message);
+    }
+
     res.status(201).json(story);
   } catch (err) {
     console.error('❌ [Stories] Create error:', err.message);
@@ -1620,6 +1648,17 @@ app.get('/api/stories', authenticateToken, async (req, res) => {
             username: true,
             avatar: true
           }
+        },
+        views: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+                avatar: true
+              }
+            }
+          }
         }
       },
       orderBy: {
@@ -1627,10 +1666,57 @@ app.get('/api/stories', authenticateToken, async (req, res) => {
       }
     });
 
-    res.json(stories);
+    // 3. Sanitize views: only creators should see who viewed their stories
+    const sanitizedStories = stories.map(story => {
+      const s = { ...story };
+      if (s.userId !== userId) {
+        delete s.views;
+      }
+      return s;
+    });
+
+    res.json(sanitizedStories);
   } catch (err) {
     console.error('❌ [Stories] Fetch error:', err.message);
     res.status(500).json({ error: 'Failed to fetch stories' });
+  }
+});
+
+// POST /api/stories/:id/view — record a story view
+app.post('/api/stories/:id/view', authenticateToken, async (req, res) => {
+  const storyId = req.params.id;
+  const userId = req.user.id;
+  try {
+    // Verify story exists and is active
+    const story = await prisma.story.findUnique({
+      where: { id: storyId }
+    });
+
+    if (!story) {
+      return res.status(404).json({ error: 'Story not found' });
+    }
+
+    // Do not log self-views
+    if (story.userId === userId) {
+      return res.json({ success: true, message: 'Self view ignored' });
+    }
+
+    // Record view
+    await prisma.storyView.upsert({
+      where: {
+        storyId_userId: { storyId, userId }
+      },
+      create: {
+        storyId,
+        userId
+      },
+      update: {}
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('❌ [Stories] Record view error:', err.message);
+    res.status(500).json({ error: 'Failed to record story view' });
   }
 });
 
