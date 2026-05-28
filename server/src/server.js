@@ -264,9 +264,14 @@ io.on('connection', async (socket) => {
     }
   });
 
-  // EVENT: send-reaction (relay emoji reaction to other user)
-  socket.on('send-reaction', ({ messageId, recipientId, emoji }) => {
+  // EVENT: send-reaction (friendship-guarded relay)
+  socket.on('send-reaction', async ({ messageId, recipientId, emoji }) => {
     if (!messageId || !recipientId || !emoji) return;
+    const areFriends = await isFriend(userId, recipientId);
+    if (!areFriends) {
+      console.warn(`⚠️ [Reaction] Blocked reaction from non-friend: ${username} -> ${recipientId}`);
+      return;
+    }
     const receiverSocketId = onlineUsers.get(recipientId);
     if (receiverSocketId) {
       io.to(receiverSocketId).emit('receive-reaction', { messageId, emoji, senderId: userId });
@@ -361,15 +366,19 @@ io.on('connection', async (socket) => {
     }
   });
 
-  // EVENT: WebRTC Call Signaling - accept-call
-  socket.on('accept-call', (data) => {
+  // EVENT: WebRTC Call Signaling - accept-call (friendship-guarded)
+  socket.on('accept-call', async (data) => {
     const { to, answer } = data;
+    if (!to) return;
+    // Only a real friend of the caller can accept
+    const areFriends = await isFriend(userId, to);
+    if (!areFriends) {
+      console.warn(`⚠️ [WebRTC] Blocked accept-call from non-friend: ${username} -> ${to}`);
+      return;
+    }
     const callerSocketId = onlineUsers.get(to);
     if (callerSocketId) {
-      io.to(callerSocketId).emit('call-accepted', {
-        from: userId,
-        answer
-      });
+      io.to(callerSocketId).emit('call-accepted', { from: userId, answer });
     }
   });
 
