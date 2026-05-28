@@ -2762,65 +2762,64 @@ export default function ChatPage() {
                 const myStoryGroup = stories.find(g => g.userId === currentUser?.id);
                 return (
                   <div 
-                    className="flex gap-4 overflow-x-auto py-3 px-3 scrollbar-hide" 
+                    className="flex items-center gap-4 py-3.5 px-1 overflow-x-auto scrollbar-hide" 
                     style={{ 
                       WebkitOverflowScrolling: 'touch', 
                       msOverflowStyle: 'none', 
-                      scrollbarWidth: 'none',
-                      background: 'var(--surface-2)',
-                      border: '1px solid var(--border)',
-                      backdropFilter: 'blur(8px)',
-                      borderRadius: '16px',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
+                      scrollbarWidth: 'none'
                     }}
                   >
                     {/* My Story circle */}
-                    <div className="flex flex-col items-center flex-shrink-0 cursor-pointer group" style={{ width: '60px' }}>
-                      <div 
-                        className="relative w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 group-hover:scale-105"
-                        onClick={() => {
-                          if (myStoryGroup) {
-                            setActiveStoryGroup(myStoryGroup);
-                            setCurrentStoryIndex(0);
-                          } else {
-                            setIsPostingStory(true);
-                          }
-                        }}
-                        style={{
-                          padding: myStoryGroup ? '2.5px' : '0px',
-                          background: myStoryGroup ? 'linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%)' : 'transparent',
-                          boxShadow: myStoryGroup ? '0 0 12px rgba(59, 130, 246, 0.35)' : 'none',
-                        }}
-                      >
-                        <div 
-                          className="w-full h-full rounded-full p-[1.5px] flex items-center justify-center"
-                          style={{ background: 'var(--surface)' }}
-                        >
-                          {currentUser?.avatar ? (
-                            <img src={optimizeAvatarUrl(currentUser.avatar)} className="w-full h-full rounded-full object-cover" />
-                          ) : (
-                            <div className="w-full h-full rounded-full bg-slate-800 flex items-center justify-center text-xs font-extrabold text-slate-200">
-                              {currentUser?.username?.slice(0, 2).toUpperCase()}
+                    <div 
+                      className="flex flex-col items-center gap-1.5 shrink-0 cursor-pointer group" 
+                      style={{ width: '64px' }}
+                      onClick={() => {
+                        if (myStoryGroup) {
+                          setActiveStoryGroup(myStoryGroup);
+                          setCurrentStoryIndex(0);
+                        } else {
+                          setIsPostingStory(true);
+                        }
+                      }}
+                    >
+                      <div className="relative">
+                        {myStoryGroup ? (
+                          <div className="w-16 h-16 rounded-full p-0.5 bg-gradient-to-tr from-[#7c3aed] to-[#FF4081] transition-all duration-300 group-hover:scale-105">
+                            <div className="w-full h-full rounded-full border-2 border-white dark:border-[#090a0f] overflow-hidden">
+                              {currentUser?.avatar ? (
+                                <img src={optimizeAvatarUrl(currentUser.avatar)} className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full rounded-full bg-slate-800 flex items-center justify-center text-xs font-extrabold text-slate-200">
+                                  {currentUser?.username?.slice(0, 2).toUpperCase()}
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                        <div 
-                          className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center text-white font-extrabold cursor-pointer hover:bg-blue-600 transition-colors shadow-md" 
-                          style={{ fontSize: '12px', border: '2px solid var(--surface)' }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setIsPostingStory(true);
-                          }}
-                        >
-                          +
-                        </div>
+                          </div>
+                        ) : (
+                          <div className="w-16 h-16 rounded-full p-0.5 border-2 border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-center transition-all duration-300 group-hover:scale-105">
+                            <div 
+                              className="w-full h-full rounded-full flex items-center justify-center text-[#7c3aed]"
+                              style={{ background: 'var(--surface-2)' }}
+                            >
+                              <span className="text-xl font-bold">+</span>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {!myStoryGroup && (
+                          <div 
+                            className="absolute bottom-0 right-0 w-5 h-5 bg-[#7c3aed] rounded-full flex items-center justify-center shadow-md"
+                            style={{ border: '2px solid var(--surface)' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setIsPostingStory(true);
+                            }}
+                          >
+                            <span className="text-[12px] font-bold text-white leading-none">+</span>
+                          </div>
+                        )}
                       </div>
-                      <span 
-                        className="text-xs mt-1.5 truncate w-full text-center font-medium" 
-                        style={{ fontSize: '10px', letterSpacing: '0.01em', color: 'var(--text-muted)' }}
-                      >
-                        My Story
-                      </span>
+                      <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate w-full text-center">My Story</span>
                     </div>
 
                     {/* Friends' Stories */}
@@ -2829,39 +2828,25 @@ export default function ChatPage() {
                       return (
                         <div
                           key={group.userId}
-                          className="flex flex-col items-center flex-shrink-0 cursor-pointer group animate-fadeIn"
+                          className="flex flex-col items-center gap-1.5 shrink-0 cursor-pointer group animate-fadeIn"
                           onClick={() => {
                             setActiveStoryGroup(group);
                             setCurrentStoryIndex(0);
                           }}
-                          style={{ width: '60px' }}
+                          style={{ width: '64px' }}
                         >
-                          <div 
-                            className="w-12 h-12 rounded-full p-[2.5px] flex items-center justify-center transition-all duration-300 group-hover:scale-105"
-                            style={{
-                              background: 'linear-gradient(45deg, #f5576c 0%, #f093fb 100%)',
-                              boxShadow: '0 0 12px rgba(245, 87, 108, 0.35)'
-                            }}
-                          >
-                            <div 
-                              className="w-full h-full rounded-full p-[1.5px] flex items-center justify-center"
-                              style={{ background: 'var(--surface)' }}
-                            >
+                          <div className="w-16 h-16 rounded-full p-0.5 bg-gradient-to-tr from-[#7c3aed] to-[#FF4081] transition-all duration-300 group-hover:scale-105">
+                            <div className="w-full h-full rounded-full border-2 border-white dark:border-[#090a0f] overflow-hidden flex items-center justify-center bg-slate-100 dark:bg-slate-800">
                               {group.avatar ? (
-                                <img src={optimizeAvatarUrl(group.avatar)} className="w-full h-full rounded-full object-cover" />
+                                <img src={optimizeAvatarUrl(group.avatar)} className="w-full h-full object-cover" />
                               ) : (
-                                <div className="w-full h-full rounded-full bg-slate-800 flex items-center justify-center text-xs font-extrabold text-white">
+                                <div className="w-full h-full rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-white">
                                   {group.username.slice(0, 2).toUpperCase()}
                                 </div>
                               )}
                             </div>
                           </div>
-                          <span 
-                            className="text-xs mt-1.5 truncate w-full text-center font-medium" 
-                            style={{ fontSize: '10px', letterSpacing: '0.01em', color: 'var(--text-muted)' }}
-                          >
-                            {group.username}
-                          </span>
+                          <span className="text-[11px] font-medium text-slate-800 dark:text-slate-200 truncate w-full text-center">{group.username}</span>
                         </div>
                       );
                     })}
