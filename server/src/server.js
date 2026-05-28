@@ -1472,6 +1472,45 @@ app.post('/api/friends/respond', authenticateToken, async (req, res) => {
   }
 });
 
+// cancel sent friend request
+app.post('/api/friends/cancel', authenticateToken, async (req, res) => {
+  try {
+    const { friendshipId } = req.body;
+    const userId = req.user.id;
+
+    if (!friendshipId) {
+      return res.status(400).json({ error: 'FriendshipId is required' });
+    }
+
+    const friendship = await prisma.friendship.findUnique({
+      where: { id: friendshipId }
+    });
+
+    if (!friendship) {
+      return res.status(404).json({ error: 'Friend request not found' });
+    }
+
+    // Security check: Only the sender can cancel their own pending request
+    if (friendship.senderId !== userId) {
+      return res.status(403).json({ error: 'Not authorized to cancel this request' });
+    }
+
+    if (friendship.status !== 'PENDING') {
+      return res.status(400).json({ error: 'Can only cancel pending friend requests' });
+    }
+
+    // Delete the pending request
+    await prisma.friendship.delete({
+      where: { id: friendshipId }
+    });
+
+    res.json({ message: 'Friend request cancelled and removed successfully' });
+  } catch (err) {
+    console.error('❌ [Friend Cancel] Error:', err.message);
+    res.status(500).json({ error: 'Server error cancelling request' });
+  }
+});
+
 // Secure Cloudinary signature generation endpoint (protected)
 app.post('/api/cloudinary/sign', authenticateToken, (req, res) => {
   try {

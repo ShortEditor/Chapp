@@ -1830,6 +1830,26 @@ export default function ChatPage() {
     }
   };
 
+  const handleCancelRequest = async (friendshipId) => {
+    const token = localStorage.getItem('chapp_token');
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/friends/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ friendshipId })
+      });
+
+      if (response.ok) {
+        refreshFriendsAndRequests(token);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
     setProfileStatusMessage({ text: 'Saving profile changes...', type: 'info' });
@@ -3400,10 +3420,34 @@ export default function ChatPage() {
                                   <p className="font-bold truncate" style={{ fontSize: '13px', color: 'var(--text)', fontFamily: 'var(--font-jakarta)', margin: 0 }}>{renderUsername(u.username)}</p>
                                   <p style={{ fontSize: '10px', color: 'var(--text-subtle)', margin: '2px 0 0' }}>Request pending...</p>
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: '20px', padding: '4px 10px', flexShrink: 0 }}>
-                                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} />
-                                  <span style={{ fontSize: '10px', fontWeight: 700, color: '#f59e0b' }}>Pending</span>
-                                </div>
+                                <button
+                                  onClick={() => handleCancelRequest(req.id)}
+                                  style={{
+                                    background: 'rgba(239, 68, 68, 0.08)',
+                                    border: '1.5px solid rgba(239, 68, 68, 0.15)',
+                                    borderRadius: '12px',
+                                    padding: '6px 12px',
+                                    color: '#ef4444',
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s ease',
+                                    fontFamily: 'var(--font-jakarta)',
+                                    flexShrink: 0
+                                  }}
+                                  onMouseEnter={e => {
+                                    e.currentTarget.style.background = '#ef4444';
+                                    e.currentTarget.style.color = '#ffffff';
+                                    e.currentTarget.style.borderColor = '#ef4444';
+                                  }}
+                                  onMouseLeave={e => {
+                                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)';
+                                    e.currentTarget.style.color = '#ef4444';
+                                    e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.15)';
+                                  }}
+                                >
+                                  Cancel Request
+                                </button>
                               </div>
                             );
                           })}
