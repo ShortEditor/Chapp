@@ -497,6 +497,7 @@ export default function ChatPage() {
   const [profileStatusMessage, setProfileStatusMessage] = useState({ text: '', type: '' });
   const [editBio, setEditBio] = useState('');
   const [editAvatar, setEditAvatar] = useState('');
+  const [editUsername, setEditUsername] = useState('');
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [bannerUploading, setBannerUploading] = useState(false);
   const [socialLinks, setSocialLinks] = useState({});
@@ -588,6 +589,7 @@ export default function ChatPage() {
     setCurrentUser(user);
     setEditBio(user.bio || '');
     setEditAvatar(user.avatar || '');
+    setEditUsername(user.username || '');
     setCustomStatus(user.status || 'online');
 
     // Fetch latest profile from backend to ensure we have the most up-to-date data
@@ -600,10 +602,11 @@ export default function ChatPage() {
       })
       .then(data => {
         setCurrentUser(data);
-      setSocialLinks(data.socialLinks || {});
+        setSocialLinks(data.socialLinks || {});
         localStorage.setItem('chapp_user', JSON.stringify(data));
         setEditBio(data.bio || '');
         setEditAvatar(data.avatar || '');
+        setEditUsername(data.username || '');
         setCustomStatus(data.status || 'online');
       })
       .catch(err => console.error('❌ Error syncing profile on startup:', err));
@@ -697,8 +700,14 @@ export default function ChatPage() {
       fetchBackupInfo();
       setBackupStatusMessage({ text: '', type: '' });
       setBackupPassword('');
+      if (currentUser) {
+        setEditBio(currentUser.bio || '');
+        setEditAvatar(currentUser.avatar || '');
+        setCustomStatus(currentUser.status || 'online');
+        setEditUsername(currentUser.username || '');
+      }
     }
-  }, [showSettings]);
+  }, [showSettings, currentUser]);
 
   // Automatic Daily Background Backup trigger
   useEffect(() => {
@@ -1546,6 +1555,7 @@ export default function ChatPage() {
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
+    setProfileStatusMessage({ text: 'Saving profile changes...', type: 'info' });
     const token = localStorage.getItem('chapp_token');
     try {
       const response = await fetch(`${BACKEND_URL}/api/users/profile`, {
@@ -1554,17 +1564,40 @@ export default function ChatPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ bio: editBio, avatar: editAvatar, status: customStatus })
+        body: JSON.stringify({ bio: editBio, avatar: editAvatar, status: customStatus, username: editUsername })
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setCurrentUser(data);
-        localStorage.setItem('chapp_user', JSON.stringify(data));
-        setShowSettings(false);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update profile');
       }
+
+      if (data.token) {
+        localStorage.setItem('chapp_token', data.token);
+      }
+
+      const user = { ...data };
+      if (user.token) {
+        delete user.token;
+      }
+
+      setCurrentUser(user);
+      localStorage.setItem('chapp_user', JSON.stringify(user));
+      setProfileStatusMessage({ text: 'Profile updated successfully!', type: 'success' });
+      
+      // Update socket connection with new token if it changed
+      if (data.token && window.socket) {
+        window.socket.auth = { token: data.token };
+        window.socket.disconnect().connect();
+      }
+
+      setTimeout(() => {
+        setShowSettings(false);
+        setProfileStatusMessage({ text: '', type: '' });
+      }, 1000);
     } catch (err) {
       console.error(err);
+      setProfileStatusMessage({ text: err.message, type: 'error' });
     }
   };
 
@@ -3675,6 +3708,18 @@ export default function ChatPage() {
                   </div>
                 </div>
 
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label className="label-text">Username</label>
+                  <input
+                    type="text"
+                    placeholder="Enter username..."
+                    value={editUsername}
+                    onChange={e => setEditUsername(e.target.value.toLowerCase().replace(/\s+/g, ''))}
+                    className="modal-input"
+                    minLength={3}
+                    required
+                  />
+                </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <label className="label-text">Bio</label>

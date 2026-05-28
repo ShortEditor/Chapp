@@ -917,8 +917,30 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
 
 app.put('/api/users/profile', authenticateToken, async (req, res) => {
   try {
-    const { bio, avatar, status, email, banner, socialLinks } = req.body;
+    const { bio, avatar, status, email, banner, socialLinks, username } = req.body;
     
+    let usernameUpdate = {};
+    if (username !== undefined) {
+      const cleanUsername = username.trim().toLowerCase();
+      if (cleanUsername.length < 3) {
+        return res.status(400).json({ error: 'Username must be at least 3 characters' });
+      }
+      
+      const currentUserRecord = await prisma.user.findUnique({
+        where: { id: req.user.id }
+      });
+      
+      if (cleanUsername !== currentUserRecord.username) {
+        const existingUser = await prisma.user.findUnique({
+          where: { username: cleanUsername }
+        });
+        if (existingUser) {
+          return res.status(400).json({ error: 'Username is already taken' });
+        }
+        usernameUpdate = { username: cleanUsername };
+      }
+    }
+
     let emailUpdate = {};
     if (email !== undefined) {
       if (email === null || email.trim() === '') {
@@ -953,11 +975,25 @@ app.put('/api/users/profile', authenticateToken, async (req, res) => {
         ...(status !== undefined && { status }),
         ...(banner !== undefined && { banner }),
         ...(socialLinks !== undefined && { socialLinks }),
+        ...usernameUpdate,
         ...emailUpdate
       }
     });
 
-    res.json({ id: updated.id, username: updated.username, avatar: updated.avatar, banner: updated.banner, bio: updated.bio, socialLinks: updated.socialLinks || {}, status: updated.status, createdAt: updated.createdAt, email: updated.email });
+    const token = generateToken(updated);
+
+    res.json({
+      id: updated.id,
+      username: updated.username,
+      avatar: updated.avatar,
+      banner: updated.banner,
+      bio: updated.bio,
+      socialLinks: updated.socialLinks || {},
+      status: updated.status,
+      createdAt: updated.createdAt,
+      email: updated.email,
+      token
+    });
   } catch (err) {
     console.error('❌ [Profile Update] Error:', err.message);
     res.status(500).json({ error: 'Server error updating profile' });
