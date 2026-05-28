@@ -2746,15 +2746,16 @@ export default function ChatPage() {
                 const myStoryGroup = stories.find(g => g.userId === currentUser?.id);
                 return (
                   <div 
-                    className="flex gap-4 overflow-x-auto py-3.5 px-3 scrollbar-hide border border-slate-800/30" 
+                    className="flex gap-4 overflow-x-auto py-3 px-3 scrollbar-hide" 
                     style={{ 
                       WebkitOverflowScrolling: 'touch', 
                       msOverflowStyle: 'none', 
                       scrollbarWidth: 'none',
-                      background: 'rgba(15, 23, 42, 0.15)',
+                      background: 'var(--surface-2)',
+                      border: '1px solid var(--border)',
                       backdropFilter: 'blur(8px)',
                       borderRadius: '16px',
-                      boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.03), 0 4px 20px rgba(0,0,0,0.1)'
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
                     }}
                   >
                     {/* My Story circle */}
@@ -2775,7 +2776,10 @@ export default function ChatPage() {
                           boxShadow: myStoryGroup ? '0 0 12px rgba(59, 130, 246, 0.35)' : 'none',
                         }}
                       >
-                        <div className="w-full h-full rounded-full bg-[#0a0b10] p-[1.5px] flex items-center justify-center">
+                        <div 
+                          className="w-full h-full rounded-full p-[1.5px] flex items-center justify-center"
+                          style={{ background: 'var(--surface)' }}
+                        >
                           {currentUser?.avatar ? (
                             <img src={optimizeAvatarUrl(currentUser.avatar)} className="w-full h-full rounded-full object-cover" />
                           ) : (
@@ -2785,8 +2789,8 @@ export default function ChatPage() {
                           )}
                         </div>
                         <div 
-                          className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center border-2 border-slate-900 text-white font-extrabold cursor-pointer hover:bg-blue-600 transition-colors shadow-md" 
-                          style={{ fontSize: '12px' }}
+                          className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center text-white font-extrabold cursor-pointer hover:bg-blue-600 transition-colors shadow-md" 
+                          style={{ fontSize: '12px', border: '2px solid var(--surface)' }}
                           onClick={(e) => {
                             e.stopPropagation();
                             setIsPostingStory(true);
@@ -2795,7 +2799,12 @@ export default function ChatPage() {
                           +
                         </div>
                       </div>
-                      <span className="text-xs mt-1.5 truncate w-full text-center text-slate-400 group-hover:text-slate-200 transition-colors font-medium" style={{ fontSize: '10px', letterSpacing: '0.01em' }}>My Story</span>
+                      <span 
+                        className="text-xs mt-1.5 truncate w-full text-center font-medium" 
+                        style={{ fontSize: '10px', letterSpacing: '0.01em', color: 'var(--text-muted)' }}
+                      >
+                        My Story
+                      </span>
                     </div>
 
                     {/* Friends' Stories */}
@@ -2818,7 +2827,10 @@ export default function ChatPage() {
                               boxShadow: '0 0 12px rgba(245, 87, 108, 0.35)'
                             }}
                           >
-                            <div className="w-full h-full rounded-full bg-[#0a0b10] p-[1.5px] flex items-center justify-center">
+                            <div 
+                              className="w-full h-full rounded-full p-[1.5px] flex items-center justify-center"
+                              style={{ background: 'var(--surface)' }}
+                            >
                               {group.avatar ? (
                                 <img src={optimizeAvatarUrl(group.avatar)} className="w-full h-full rounded-full object-cover" />
                               ) : (
@@ -2828,7 +2840,12 @@ export default function ChatPage() {
                               )}
                             </div>
                           </div>
-                          <span className="text-xs mt-1.5 truncate w-full text-center text-slate-400 group-hover:text-slate-200 transition-colors font-medium" style={{ fontSize: '10px', letterSpacing: '0.01em' }}>{group.username}</span>
+                          <span 
+                            className="text-xs mt-1.5 truncate w-full text-center font-medium" 
+                            style={{ fontSize: '10px', letterSpacing: '0.01em', color: 'var(--text-muted)' }}
+                          >
+                            {group.username}
+                          </span>
                         </div>
                       );
                     })}
@@ -5238,251 +5255,254 @@ export default function ChatPage() {
             />
           )}
 
-          {/* Left Arrow Button (Desktop Only) - OUTSIDE the Frame */}
-          <button 
-            disabled={currentStoryIndex === 0}
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowViewedByList(false);
-              setCurrentStoryIndex(prev => prev - 1);
-              setStoryProgress(0);
-            }}
-            className="hidden md:flex absolute left-8 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 text-white items-center justify-center transition-all border border-white/15 cursor-pointer disabled:opacity-0 disabled:pointer-events-none z-35 shadow-lg active:scale-90"
-            title="Previous Story"
-          >
-            <ChevronUp className="w-6 h-6 -rotate-90 text-slate-100" />
-          </button>
-
-          {/* Right Arrow Button (Desktop Only) - OUTSIDE the Frame */}
-          <button 
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowViewedByList(false);
-              if (currentStoryIndex < activeStoryGroup.items.length - 1) {
-                setCurrentStoryIndex(prev => prev + 1);
+          {/* Relative wrapper to anchor desktop navigation arrows close to the story card on PC */}
+          <div className="relative flex items-center justify-center w-full max-w-[400px]">
+            {/* Left Arrow Button (Desktop Only) - close proximity */}
+            <button 
+              disabled={currentStoryIndex === 0}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowViewedByList(false);
+                setCurrentStoryIndex(prev => prev - 1);
                 setStoryProgress(0);
-              } else {
-                setActiveStoryGroup(null);
-              }
-            }}
-            className="hidden md:flex absolute right-8 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 text-white items-center justify-center transition-all border border-white/15 cursor-pointer z-35 shadow-lg active:scale-90"
-            title="Next Story"
-          >
-            <ChevronUp className="w-6 h-6 rotate-90 text-slate-100" />
-          </button>
-
-          {/* Main Portrait phone frame container card */}
-          <div 
-            className="relative w-full max-w-[400px] aspect-[9/16] h-[95vh] md:max-h-[82vh] rounded-[28px] overflow-hidden flex flex-col items-center justify-between border border-white/15 shadow-[0_30px_70px_rgba(0,0,0,0.85)] z-10"
-            style={{ background: '#000000' }}
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Native Gesture Tap Zones (Left 40% / Right 60%) */}
-            <div 
-              className="absolute left-0 top-0 bottom-0 w-[40%] z-20 cursor-pointer"
-              title="Tap left to go back"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (currentStoryIndex > 0) {
-                  setCurrentStoryIndex(currentStoryIndex - 1);
-                  setStoryProgress(0);
-                } else {
-                  setActiveStoryGroup(null);
-                }
               }}
-            />
-            <div 
-              className="absolute right-0 top-0 bottom-0 w-[60%] z-20 cursor-pointer"
-              title="Tap right to go next"
+              className="hidden md:flex absolute -left-16 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 text-white items-center justify-center transition-all border border-white/15 cursor-pointer disabled:opacity-0 disabled:pointer-events-none z-35 shadow-lg active:scale-90"
+              title="Previous Story"
+            >
+              <ChevronUp className="w-6 h-6 -rotate-90 text-slate-100" />
+            </button>
+
+            {/* Right Arrow Button (Desktop Only) - close proximity */}
+            <button 
               onClick={(e) => {
                 e.stopPropagation();
+                setShowViewedByList(false);
                 if (currentStoryIndex < activeStoryGroup.items.length - 1) {
-                  setCurrentStoryIndex(currentStoryIndex + 1);
+                  setCurrentStoryIndex(prev => prev + 1);
                   setStoryProgress(0);
                 } else {
                   setActiveStoryGroup(null);
                 }
               }}
-            />
+              className="hidden md:flex absolute -right-16 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 text-white items-center justify-center transition-all border border-white/15 cursor-pointer z-35 shadow-lg active:scale-90"
+              title="Next Story"
+            >
+              <ChevronUp className="w-6 h-6 rotate-90 text-slate-100" />
+            </button>
 
-            {/* Top Navigation Overlay */}
-            <div className="w-full p-4 absolute top-0 left-0 right-0 z-30 bg-gradient-to-b from-black/90 via-black/40 to-transparent flex flex-col gap-3">
-              {/* Progress Bars */}
-              <div className="flex gap-1.5 w-full">
-                {activeStoryGroup.items.map((item, idx) => {
-                  let width = '0%';
-                  if (idx < currentStoryIndex) width = '100%';
-                  else if (idx === currentStoryIndex) width = `${storyProgress}%`;
-                  return (
-                    <div key={item.id} className="flex-1 h-1 bg-white/25 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-white transition-all ease-linear" 
-                        style={{ width, duration: '50ms' }}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
+            {/* Main Portrait phone frame container card */}
+            <div 
+              className="relative w-full max-w-[400px] aspect-[9/16] h-[95vh] md:max-h-[82vh] rounded-[28px] overflow-hidden flex flex-col items-center justify-between border border-white/15 shadow-[0_30px_70px_rgba(0,0,0,0.85)] z-10"
+              style={{ background: '#000000' }}
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Native Gesture Tap Zones (Left 40% / Right 60%) */}
+              <div 
+                className="absolute left-0 top-0 bottom-0 w-[40%] z-20 cursor-pointer"
+                title="Tap left to go back"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (currentStoryIndex > 0) {
+                    setCurrentStoryIndex(currentStoryIndex - 1);
+                    setStoryProgress(0);
+                  } else {
+                    setActiveStoryGroup(null);
+                  }
+                }}
+              />
+              <div 
+                className="absolute right-0 top-0 bottom-0 w-[60%] z-20 cursor-pointer"
+                title="Tap right to go next"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (currentStoryIndex < activeStoryGroup.items.length - 1) {
+                    setCurrentStoryIndex(currentStoryIndex + 1);
+                    setStoryProgress(0);
+                  } else {
+                    setActiveStoryGroup(null);
+                  }
+                }}
+              />
 
-              {/* User Metadata Header */}
-              <div className="flex items-center justify-between text-white w-full">
-                <div className="flex items-center gap-3">
-                  {activeStoryGroup.avatar ? (
-                    <img src={optimizeAvatarUrl(activeStoryGroup.avatar)} className="w-9 h-9 rounded-full object-cover border border-white/20 shadow-md" />
-                  ) : (
-                    <div className="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center font-bold text-xs text-white border border-white/20">
-                      {activeStoryGroup.username.slice(0, 2).toUpperCase()}
-                    </div>
-                  )}
-                  <div>
-                    <div className="font-bold text-xs text-slate-100 drop-shadow-md">{renderUsername(activeStoryGroup.username)}</div>
-                    <div className="text-[10px] text-slate-300 drop-shadow-md mt-0.5">
-                      {new Date(activeStoryGroup.items[currentStoryIndex]?.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                  </div>
+              {/* Top Navigation Overlay */}
+              <div className="w-full p-4 absolute top-0 left-0 right-0 z-30 bg-gradient-to-b from-black/90 via-black/40 to-transparent flex flex-col gap-3">
+                {/* Progress Bars */}
+                <div className="flex gap-1.5 w-full">
+                  {activeStoryGroup.items.map((item, idx) => {
+                    let width = '0%';
+                    if (idx < currentStoryIndex) width = '100%';
+                    else if (idx === currentStoryIndex) width = `${storyProgress}%`;
+                    return (
+                      <div key={item.id} className="flex-1 h-1 bg-white/25 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-white transition-all ease-linear" 
+                          style={{ width, duration: '50ms' }}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  {/* Delete Button (Creator only) */}
-                  {activeStoryGroup.items[currentStoryIndex]?.userId === currentUser?.id && (
+                {/* User Metadata Header */}
+                <div className="flex items-center justify-between text-white w-full">
+                  <div className="flex items-center gap-3">
+                    {activeStoryGroup.avatar ? (
+                      <img src={optimizeAvatarUrl(activeStoryGroup.avatar)} className="w-9 h-9 rounded-full object-cover border border-white/20 shadow-md" />
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center font-bold text-xs text-white border border-white/20">
+                        {activeStoryGroup.username.slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
+                    <div>
+                      <div className="font-bold text-xs text-slate-100 drop-shadow-md">{renderUsername(activeStoryGroup.username)}</div>
+                      <div className="text-[10px] text-slate-300 drop-shadow-md mt-0.5">
+                        {new Date(activeStoryGroup.items[currentStoryIndex]?.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    {/* Delete Button (Creator only) */}
+                    {activeStoryGroup.items[currentStoryIndex]?.userId === currentUser?.id && (
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteStory(activeStoryGroup.items[currentStoryIndex].id);
+                        }}
+                        className="p-1.5 rounded-full hover:bg-red-500/25 text-red-400 border-none bg-transparent cursor-pointer flex items-center justify-center transition-all z-40"
+                        title="Delete Story"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+
+                    {/* Close Button */}
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleDeleteStory(activeStoryGroup.items[currentStoryIndex].id);
+                        setActiveStoryGroup(null);
+                        setShowViewedByList(false);
                       }}
-                      className="p-1.5 rounded-full hover:bg-red-500/25 text-red-400 border-none bg-transparent cursor-pointer flex items-center justify-center transition-all z-40"
-                      title="Delete Story"
+                      className="p-1.5 rounded-full hover:bg-white/10 text-white border-none bg-transparent cursor-pointer transition-all z-40"
+                      title="Close"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <X className="w-4 h-4" />
                     </button>
-                  )}
-
-                  {/* Close Button */}
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActiveStoryGroup(null);
-                      setShowViewedByList(false);
-                    }}
-                    className="p-1.5 rounded-full hover:bg-white/10 text-white border-none bg-transparent cursor-pointer transition-all z-40"
-                    title="Close"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+                  </div>
                 </div>
+
+                {/* Music Player Indicator overlay (Instagram style) */}
+                {activeStoryGroup.items[currentStoryIndex]?.musicUrl && (
+                  <div 
+                    className="flex items-center justify-between bg-black/45 backdrop-blur-md border border-white/10 rounded-full px-3 py-1 text-[10px] text-white w-max max-w-[200px] z-30 hover:bg-black/60 transition-all"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-center gap-1.5 truncate flex-1 min-w-0">
+                      <Music className="w-3 h-3 text-pink-400 animate-spin shrink-0" style={{ animationDuration: '4s' }} />
+                      <span className="truncate font-bold tracking-wide text-slate-100">{activeStoryGroup.items[currentStoryIndex].musicTitle || "Soundtrack"}</span>
+                    </div>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsStoryMusicMuted(!isStoryMusicMuted);
+                      }}
+                      className="p-0.5 text-white/80 hover:text-white bg-transparent border-none cursor-pointer shrink-0 ml-1.5 z-40"
+                    >
+                      {isStoryMusicMuted ? <VolumeX className="w-3.5 h-3.5 text-pink-400" /> : <Volume2 className="w-3.5 h-3.5 text-slate-200" />}
+                    </button>
+                  </div>
+                )}
               </div>
 
-              {/* Music Player Indicator overlay (Instagram style) */}
-              {activeStoryGroup.items[currentStoryIndex]?.musicUrl && (
+              {/* Full screen Immersive Media Viewport */}
+              <div className="absolute inset-0 w-full h-full z-0 bg-neutral-950">
+                {activeStoryGroup.items[currentStoryIndex]?.mediaType === 'video' ? (
+                  <video 
+                    src={optimizeMediaUrl(activeStoryGroup.items[currentStoryIndex]?.mediaUrl)} 
+                    autoPlay 
+                    playsInline
+                    className="w-full h-full object-cover select-none pointer-events-none"
+                  />
+                ) : (
+                  <img 
+                    src={optimizeMediaUrl(activeStoryGroup.items[currentStoryIndex]?.mediaUrl)} 
+                    alt="Story content" 
+                    className="w-full h-full object-cover select-none pointer-events-none"
+                  />
+                )}
+              </div>
+
+              {/* Caption (Instagram story text styling overlay) */}
+              {activeStoryGroup.items[currentStoryIndex]?.caption && (
                 <div 
-                  className="flex items-center justify-between bg-black/45 backdrop-blur-md border border-white/10 rounded-full px-3 py-1 text-[10px] text-white w-max max-w-[200px] z-30 hover:bg-black/60 transition-all"
+                  className="absolute bottom-16 left-4 right-4 z-30 bg-black/45 backdrop-blur-md text-white text-center py-2 px-3.5 rounded-2xl text-[11px] font-semibold tracking-wide border border-white/5 shadow-md max-h-[80px] overflow-y-auto"
+                  onClick={e => e.stopPropagation()}
+                >
+                  {activeStoryGroup.items[currentStoryIndex].caption}
+                </div>
+              )}
+
+              {/* Viewed by list footer trigger button (for owners) */}
+              {activeStoryGroup.items[currentStoryIndex]?.userId === currentUser?.id && (
+                <div className="absolute bottom-4 left-0 right-0 flex justify-center z-30">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowViewedByList(true);
+                    }}
+                    className="px-3.5 py-1 rounded-full bg-black/50 hover:bg-black/70 active:scale-95 transition-all text-[10px] text-white/90 font-bold flex items-center gap-1.5 border border-white/10 cursor-pointer shadow-lg backdrop-blur-md"
+                  >
+                    <Eye className="w-3 h-3" /> Views ({activeStoryGroup.items[currentStoryIndex]?.views?.length || 0})
+                  </button>
+                </div>
+              )}
+
+              {/* Viewed by overlay sheet inside the card */}
+              {showViewedByList && (
+                <div 
+                  className="absolute inset-0 bg-black/95 backdrop-blur-md rounded-[28px] flex flex-col z-40 animate-fade-in p-5"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <div className="flex items-center gap-1.5 truncate flex-1 min-w-0">
-                    <Music className="w-3 h-3 text-pink-400 animate-spin shrink-0" style={{ animationDuration: '4s' }} />
-                    <span className="truncate font-bold tracking-wide text-slate-100">{activeStoryGroup.items[currentStoryIndex].musicTitle || "Soundtrack"}</span>
+                  <div className="flex justify-between items-center border-b border-white/10 pb-3 mb-4">
+                    <h4 className="text-xs font-extrabold tracking-wider uppercase text-pink-500 flex items-center gap-2">
+                      <Eye className="w-3.5 h-3.5 text-pink-500" /> Story Views ({activeStoryGroup.items[currentStoryIndex]?.views?.length || 0})
+                    </h4>
+                    <button 
+                      onClick={() => setShowViewedByList(false)}
+                      className="p-1 rounded-full hover:bg-white/10 text-white/60 hover:text-white border-none bg-transparent cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsStoryMusicMuted(!isStoryMusicMuted);
-                    }}
-                    className="p-0.5 text-white/80 hover:text-white bg-transparent border-none cursor-pointer shrink-0 ml-1.5 z-40"
-                  >
-                    {isStoryMusicMuted ? <VolumeX className="w-3.5 h-3.5 text-pink-400" /> : <Volume2 className="w-3.5 h-3.5 text-slate-200" />}
-                  </button>
-                </div>
-              )}
-            </div>
 
-            {/* Full screen Immersive Media Viewport */}
-            <div className="absolute inset-0 w-full h-full z-0 bg-neutral-950">
-              {activeStoryGroup.items[currentStoryIndex]?.mediaType === 'video' ? (
-                <video 
-                  src={optimizeMediaUrl(activeStoryGroup.items[currentStoryIndex]?.mediaUrl)} 
-                  autoPlay 
-                  playsInline
-                  className="w-full h-full object-cover select-none pointer-events-none"
-                />
-              ) : (
-                <img 
-                  src={optimizeMediaUrl(activeStoryGroup.items[currentStoryIndex]?.mediaUrl)} 
-                  alt="Story content" 
-                  className="w-full h-full object-cover select-none pointer-events-none"
-                />
-              )}
-            </div>
-
-            {/* Caption (Instagram story text styling overlay) */}
-            {activeStoryGroup.items[currentStoryIndex]?.caption && (
-              <div 
-                className="absolute bottom-16 left-4 right-4 z-30 bg-black/45 backdrop-blur-md text-white text-center py-2 px-3.5 rounded-2xl text-[11px] font-semibold tracking-wide border border-white/5 shadow-md max-h-[80px] overflow-y-auto"
-                onClick={e => e.stopPropagation()}
-              >
-                {activeStoryGroup.items[currentStoryIndex].caption}
-              </div>
-            )}
-
-            {/* Viewed by list footer trigger button (for owners) */}
-            {activeStoryGroup.items[currentStoryIndex]?.userId === currentUser?.id && (
-              <div className="absolute bottom-4 left-0 right-0 flex justify-center z-30">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowViewedByList(true);
-                  }}
-                  className="px-3.5 py-1 rounded-full bg-black/50 hover:bg-black/70 active:scale-95 transition-all text-[10px] text-white/90 font-bold flex items-center gap-1.5 border border-white/10 cursor-pointer shadow-lg backdrop-blur-md"
-                >
-                  <Eye className="w-3 h-3" /> Views ({activeStoryGroup.items[currentStoryIndex]?.views?.length || 0})
-                </button>
-              </div>
-            )}
-
-            {/* Viewed by overlay sheet inside the card */}
-            {showViewedByList && (
-              <div 
-                className="absolute inset-0 bg-black/95 backdrop-blur-md rounded-[28px] flex flex-col z-40 animate-fade-in p-5"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex justify-between items-center border-b border-white/10 pb-3 mb-4">
-                  <h4 className="text-xs font-extrabold tracking-wider uppercase text-pink-500 flex items-center gap-2">
-                    <Eye className="w-3.5 h-3.5 text-pink-500" /> Story Views ({activeStoryGroup.items[currentStoryIndex]?.views?.length || 0})
-                  </h4>
-                  <button 
-                    onClick={() => setShowViewedByList(false)}
-                    className="p-1 rounded-full hover:bg-white/10 text-white/60 hover:text-white border-none bg-transparent cursor-pointer"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
-                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
-                  {activeStoryGroup.items[currentStoryIndex]?.views && activeStoryGroup.items[currentStoryIndex].views.length > 0 ? (
-                    activeStoryGroup.items[currentStoryIndex].views.map((v) => (
-                      <div key={v.id} className="flex items-center justify-between p-2 rounded-xl bg-white/5 border border-white/5">
-                        <div className="flex items-center gap-2.5">
-                          {v.user?.avatar ? (
-                            <img src={optimizeAvatarUrl(v.user.avatar)} className="w-7 h-7 rounded-full object-cover border border-white/15" />
-                          ) : (
-                            <div className="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center font-bold text-[10px] text-white">
-                              {v.user?.username?.slice(0, 2).toUpperCase()}
-                            </div>
-                          )}
-                          <span className="text-[11px] font-bold text-slate-200">{v.user?.username}</span>
+                  <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
+                    {activeStoryGroup.items[currentStoryIndex]?.views && activeStoryGroup.items[currentStoryIndex].views.length > 0 ? (
+                      activeStoryGroup.items[currentStoryIndex].views.map((v) => (
+                        <div key={v.id} className="flex items-center justify-between p-2 rounded-xl bg-white/5 border border-white/5">
+                          <div className="flex items-center gap-2.5">
+                            {v.user?.avatar ? (
+                              <img src={optimizeAvatarUrl(v.user.avatar)} className="w-7 h-7 rounded-full object-cover border border-white/15" />
+                            ) : (
+                              <div className="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center font-bold text-[10px] text-white">
+                                {v.user?.username?.slice(0, 2).toUpperCase()}
+                              </div>
+                            )}
+                            <span className="text-[11px] font-bold text-slate-200">{v.user?.username}</span>
+                          </div>
+                          <span className="text-[9px] text-slate-500">
+                            {new Date(v.viewedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
                         </div>
-                        <span className="text-[9px] text-slate-500">
-                          {new Date(v.viewedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
+                      ))
+                    ) : (
+                      <div className="text-center py-10 text-[10px] text-slate-500">
+                        No views yet. Active friends will see your story updates!
                       </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-10 text-[10px] text-slate-500">
-                      No views yet. Active friends will see your story updates!
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       )}
