@@ -787,7 +787,7 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
     });
     
     if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json({ id: user.id, username: user.username, avatar: user.avatar, banner: user.banner, bio: user.bio, status: user.status, createdAt: user.createdAt, email: user.email });
+    res.json({ id: user.id, username: user.username, avatar: user.avatar, banner: user.banner, bio: user.bio, socialLinks: user.socialLinks || {}, status: user.status, createdAt: user.createdAt, email: user.email });
   } catch (err) {
     res.status(500).json({ error: 'Server error fetching profile' });
   }
@@ -795,7 +795,7 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
 
 app.put('/api/users/profile', authenticateToken, async (req, res) => {
   try {
-    const { bio, avatar, status, email, banner } = req.body;
+    const { bio, avatar, status, email, banner, socialLinks } = req.body;
     
     let emailUpdate = {};
     if (email !== undefined) {
@@ -830,11 +830,12 @@ app.put('/api/users/profile', authenticateToken, async (req, res) => {
         ...(avatar !== undefined && { avatar }),
         ...(status !== undefined && { status }),
         ...(banner !== undefined && { banner }),
+        ...(socialLinks !== undefined && { socialLinks }),
         ...emailUpdate
       }
     });
 
-    res.json({ id: updated.id, username: updated.username, avatar: updated.avatar, banner: updated.banner, bio: updated.bio, status: updated.status, createdAt: updated.createdAt, email: updated.email });
+    res.json({ id: updated.id, username: updated.username, avatar: updated.avatar, banner: updated.banner, bio: updated.bio, socialLinks: updated.socialLinks || {}, status: updated.status, createdAt: updated.createdAt, email: updated.email });
   } catch (err) {
     console.error('❌ [Profile Update] Error:', err.message);
     res.status(500).json({ error: 'Server error updating profile' });
@@ -867,6 +868,7 @@ app.get('/api/users/:id/profile', authenticateToken, async (req, res) => {
       avatar: user.avatar,
       banner: user.banner,
       bio: user.bio,
+      socialLinks: user.socialLinks || {},
       status: user.status,
       createdAt: user.createdAt,
       publicKey: user.publicKey || null,
@@ -1178,6 +1180,7 @@ app.get('/api/friends', authenticateToken, async (req, res) => {
           avatar: targetUser.avatar,
           banner: targetUser.banner,
           bio: targetUser.bio,
+          socialLinks: targetUser.socialLinks || {},
           status: targetUser.status,
           publicKey: targetUser.publicKey || null
         }
