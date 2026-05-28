@@ -100,7 +100,7 @@ export function SocketProvider({ children }) {
     if (!friendPublicKeyJwk) {
       console.log(`🔑 [E2EE] Fetching public key for friend ${friendId} from server...`);
       try {
-        const res = await fetch(`${BACKEND_URL}/api/users/${friendId}/public-key`, {
+        const res = await fetch(`${BACKEND_URL}/api/keys/public/${friendId}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
@@ -148,7 +148,7 @@ export function SocketProvider({ children }) {
         publicKeyJwk = keys.publicKeyJwk;
         
         console.log('🔑 [E2EE] Uploading public key to server...');
-        await fetch(`${BACKEND_URL}/api/users/profile/public-key`, {
+        await fetch(`${BACKEND_URL}/api/keys/public`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -166,7 +166,7 @@ export function SocketProvider({ children }) {
             const pubKeyRecord = await db.e2eeKeys.get('public_key_' + userId);
             if (pubKeyRecord) {
               console.log('🔑 [E2EE] Server missing public key. Uploading local key...');
-              await fetch(`${BACKEND_URL}/api/users/profile/public-key`, {
+              await fetch(`${BACKEND_URL}/api/keys/public`, {
                 method: 'PUT',
                 headers: {
                   'Content-Type': 'application/json',
