@@ -213,6 +213,8 @@ export default function ChatPage() {
   const [currentUser, setCurrentUser] = useState(null);
   const [activeTab, setActiveTab] = useState('chats'); // 'chats' | 'friends' | 'requests'
   const [activeFriend, setActiveFriend] = useState(null);
+  const [viewingUser, setViewingUser] = useState(null);
+  const [viewingUserAdding, setViewingUserAdding] = useState(false);
 
   const [newFriendUsername, setNewFriendUsername] = useState('');
   const [friendRequestMessage, setFriendRequestMessage] = useState({ text: '', type: '' });
@@ -1753,13 +1755,9 @@ export default function ChatPage() {
                   return (
                     <div
                       key={friend.id}
-                      onClick={() => {
-                        setActiveFriend(friend);
-                        db.chats.put({ friendId: friend.id, lastMessageText: '', lastMessageTime: Date.now(), unreadCount: 0 }).catch(() => {});
-                        setActiveTab('chats');
-                      }}
+                      onClick={() => setViewingUser(friend)}
                       className="conv-item animate-fade-in"
-                      style={{ borderRadius: '12px', background: 'var(--surface-2)', border: '1px solid var(--border-light)' }}
+                      style={{ borderRadius: '12px', background: 'var(--surface-2)', border: '1px solid var(--border-light)', cursor: 'pointer' }}
                     >
                       <div className="relative shrink-0">
                         <div className="avatar w-10 h-10 text-xs relative" style={{ background: getAvatarColor(friend.username) }}>
@@ -1844,13 +1842,13 @@ export default function ChatPage() {
                   return (
                     <div key={req.id} className="p-3 rounded-2xl border" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
                       <div className="flex items-center gap-3 mb-3">
-                        <div className="avatar w-10 h-10 text-xs shrink-0 relative" style={{ background: getAvatarColor(u.username) }}>
+                        <div className="avatar w-10 h-10 text-xs shrink-0 relative" style={{ background: getAvatarColor(u.username), cursor: 'pointer' }} onClick={() => setViewingUser(u)}>
                           {u.username.slice(0, 2)}
                           {u.avatar?.startsWith('http') && (
                             <img src={optimizeAvatarUrl(u.avatar)} alt={u.username} className="w-full h-full object-cover" style={{ position: 'absolute', top: 0, left: 0 }} onError={(e) => { e.target.style.display = 'none'; }} />
                           )}
                         </div>
-                        <div>
+                        <div style={{ cursor: 'pointer' }} onClick={() => setViewingUser(u)}>
                           <p className="text-sm font-semibold flex items-center gap-1" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>{renderUsername(u.username)}</p>
                           <p className="text-xs" style={{ color: 'var(--text-subtle)' }}>
                             {req.isOutgoing ? 'Request sent' : 'Wants to connect'}
@@ -2347,7 +2345,7 @@ export default function ChatPage() {
                   <ArrowLeft className="w-5 h-5" />
                 </button>
 
-                <div className="relative shrink-0">
+                <div className="relative shrink-0" style={{ cursor: 'pointer' }} onClick={() => setViewingUser(activeFriend)}>
                   <div className="avatar w-10 h-10 text-sm relative" style={{ background: getAvatarColor(activeFriend.username) }}>
                     {activeFriend.username.slice(0, 2)}
                     {activeFriend.avatar?.startsWith('http') && (
@@ -2359,7 +2357,7 @@ export default function ChatPage() {
                   )}
                 </div>
 
-                <div>
+                <div style={{ cursor: 'pointer' }} onClick={() => setViewingUser(activeFriend)}>
                   <h3 className="text-sm font-bold truncate flex items-center gap-1" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>
                     {renderUsername(activeFriend.username)}
                   </h3>
@@ -3382,6 +3380,200 @@ export default function ChatPage() {
           </div>
         </div>
       )}
+
+      {/* ═══════════════════════════════════════
+          USER PROFILE MODAL
+          ═══════════════════════════════════════ */}
+      {viewingUser && (() => {
+        const isFriend = dbFriends.some(f => f.id === viewingUser.id);
+        const isOnline = onlineFriends.get(viewingUser.id) === 'online';
+        const isMe = viewingUser.id === currentUser?.id;
+        return (
+          <div
+            style={{
+              position: 'fixed', inset: 0, zIndex: 9999,
+              display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+              background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)',
+            }}
+            onClick={() => setViewingUser(null)}
+          >
+            <div
+              style={{
+                width: '100%', maxWidth: '420px',
+                background: 'var(--surface)',
+                borderRadius: '28px 28px 0 0',
+                overflow: 'hidden',
+                boxShadow: '0 -8px 40px rgba(0,0,0,0.25)',
+                animation: 'slideUp 0.28s cubic-bezier(0.34,1.56,0.64,1)',
+              }}
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Banner */}
+              <div style={{
+                height: '110px', position: 'relative', flexShrink: 0,
+                background: viewingUser.banner
+                  ? 'transparent'
+                  : 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 40%, #ec4899 80%, #f97316 100%)',
+              }}>
+                {viewingUser.banner && (
+                  <img src={viewingUser.banner} alt="banner" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} onError={e => e.target.style.display='none'} />
+                )}
+                {!viewingUser.banner && (
+                  <>
+                    <div style={{ position: 'absolute', top: '-20px', left: '-10px', width: '100px', height: '100px', borderRadius: '50%', background: 'rgba(255,255,255,0.10)', filter: 'blur(16px)' }} />
+                    <div style={{ position: 'absolute', bottom: '-10px', right: '20px', width: '70px', height: '70px', borderRadius: '50%', background: 'rgba(255,255,255,0.08)', filter: 'blur(12px)' }} />
+                  </>
+                )}
+                {/* Close button */}
+                <button
+                  onClick={() => setViewingUser(null)}
+                  style={{ position: 'absolute', top: '10px', right: '12px', background: 'rgba(0,0,0,0.3)', border: 'none', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff' }}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Avatar overlapping banner */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '-38px', paddingBottom: '20px' }}>
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  {/* Glow ring */}
+                  <div style={{ position: 'absolute', inset: '-3px', borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1, #ec4899)', opacity: 0.7, filter: 'blur(4px)', zIndex: 0 }} />
+                  <div style={{
+                    width: '76px', height: '76px', borderRadius: '50%',
+                    border: '3px solid var(--surface)',
+                    background: getAvatarColor(viewingUser.username),
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    overflow: 'hidden', position: 'relative', zIndex: 1,
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+                    fontSize: '22px', fontWeight: 800, color: '#fff',
+                    fontFamily: 'var(--font-jakarta)',
+                  }}>
+                    {viewingUser.username?.slice(0, 2)}
+                    {viewingUser.avatar?.startsWith('http') && (
+                      <img src={optimizeAvatarUrl(viewingUser.avatar)} alt={viewingUser.username} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} onError={e => e.target.style.display='none'} />
+                    )}
+                  </div>
+                  {/* Online dot */}
+                  {isOnline && (
+                    <span style={{ position: 'absolute', bottom: '4px', right: '4px', width: '13px', height: '13px', borderRadius: '50%', background: '#34a853', border: '2.5px solid var(--surface)', zIndex: 2 }} />
+                  )}
+                </div>
+
+                {/* Name & handle */}
+                <h2 style={{ margin: '10px 0 2px', fontSize: '17px', fontWeight: 800, color: 'var(--text)', fontFamily: 'var(--font-jakarta)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  {renderUsername(viewingUser.username)}
+                </h2>
+                <p style={{ fontSize: '12px', color: 'var(--text-subtle)', margin: 0 }}>@{viewingUser.username?.toLowerCase()}</p>
+
+                {/* Status pill */}
+                <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '5px', background: isOnline ? 'rgba(52,168,83,0.10)' : 'var(--border-light)', border: `1px solid ${isOnline ? 'rgba(52,168,83,0.25)' : 'var(--border)'}`, borderRadius: '20px', padding: '3px 10px' }}>
+                  <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: isOnline ? '#34a853' : 'var(--text-subtle)', display: 'inline-block' }} />
+                  <span style={{ fontSize: '10px', fontWeight: 700, color: isOnline ? '#34a853' : 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{isOnline ? 'Online' : 'Offline'}</span>
+                </div>
+
+                {/* Bio */}
+                {viewingUser.bio && (
+                  <p style={{ margin: '12px 20px 0', fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.5', textAlign: 'center' }}>
+                    {viewingUser.bio}
+                  </p>
+                )}
+
+                {/* Friend badge */}
+                {isFriend && (
+                  <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '5px', background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.20)', borderRadius: '20px', padding: '4px 12px' }}>
+                    <Users style={{ width: '11px', height: '11px', color: '#6366f1' }} />
+                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#6366f1', letterSpacing: '0.05em' }}>FRIENDS</span>
+                  </div>
+                )}
+
+                {/* Action buttons */}
+                {!isMe && (
+                  <div style={{ display: 'flex', gap: '10px', marginTop: '16px', padding: '0 20px', width: '100%', boxSizing: 'border-box' }}>
+                    {/* Message button */}
+                    <button
+                      onClick={() => {
+                        if (isFriend) {
+                          setActiveFriend(viewingUser);
+                          db.chats.put({ friendId: viewingUser.id, lastMessageText: '', lastMessageTime: Date.now(), unreadCount: 0 }).catch(() => {});
+                          setActiveTab('chats');
+                        }
+                        setViewingUser(null);
+                      }}
+                      style={{
+                        flex: 1, padding: '12px', borderRadius: '16px', border: 'none',
+                        background: isFriend ? 'var(--primary)' : 'var(--border-light)',
+                        color: isFriend ? '#fff' : 'var(--text-subtle)',
+                        fontSize: '13px', fontWeight: 700, cursor: isFriend ? 'pointer' : 'not-allowed',
+                        fontFamily: 'var(--font-jakarta)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                        opacity: isFriend ? 1 : 0.5,
+                        transition: 'all 0.18s',
+                      }}
+                      title={isFriend ? 'Open chat' : 'Add as friend first'}
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                      Message
+                    </button>
+
+                    {/* Add friend / Friends indicator button */}
+                    {!isFriend ? (
+                      <button
+                        onClick={async () => {
+                          setViewingUserAdding(true);
+                          const token = localStorage.getItem('chapp_token');
+                          try {
+                            const res = await fetch(`${BACKEND_URL}/api/friends/request`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                              body: JSON.stringify({ username: viewingUser.username }),
+                            });
+                            const data = await res.json();
+                            if (!res.ok) throw new Error(data.error || 'Failed');
+                            confetti({ particleCount: 50, spread: 40, origin: { y: 0.6 }, colors: ['#6366f1','#a5b4fc','#ec4899'] });
+                            refreshFriendsAndRequests(token);
+                            setViewingUser(null);
+                          } catch (err) {
+                            alert(err.message);
+                          } finally {
+                            setViewingUserAdding(false);
+                          }
+                        }}
+                        disabled={viewingUserAdding}
+                        style={{
+                          flex: 1, padding: '12px', borderRadius: '16px', border: '1.5px solid var(--primary)',
+                          background: 'var(--primary-light)', color: 'var(--primary)',
+                          fontSize: '13px', fontWeight: 700, cursor: 'pointer',
+                          fontFamily: 'var(--font-jakarta)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                          transition: 'all 0.18s',
+                        }}
+                      >
+                        {viewingUserAdding ? (
+                          <span className="w-4 h-4 border-2 border-current/40 border-t-current rounded-full animate-spin" />
+                        ) : (
+                          <><UserPlus className="w-4 h-4" />Add Friend</>
+                        )}
+                      </button>
+                    ) : (
+                      <div style={{
+                        flex: 1, padding: '12px', borderRadius: '16px',
+                        background: 'rgba(52,168,83,0.08)', border: '1.5px solid rgba(52,168,83,0.25)',
+                        color: '#34a853', fontSize: '13px', fontWeight: 700,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                        fontFamily: 'var(--font-jakarta)',
+                      }}>
+                        <Check className="w-4 h-4" />
+                        Friends
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
     </div>
   );
 }
