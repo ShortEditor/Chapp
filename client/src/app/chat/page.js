@@ -227,6 +227,7 @@ export default function ChatPage() {
   const [editBio, setEditBio] = useState('');
   const [editAvatar, setEditAvatar] = useState('');
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [bannerUploading, setBannerUploading] = useState(false);
   const [customStatus, setCustomStatus] = useState('');
 
   // Friend suggestions states
@@ -828,6 +829,120 @@ export default function ChatPage() {
       setProfileStatusMessage({ text: `Avatar upload failed: ${layer3Err.message}`, type: 'error' });
     } finally {
       setAvatarUploading(false);
+    }
+  };
+
+  const saveBannerToBackend = async (imageUrl, token) => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/users/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ banner: imageUrl })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setCurrentUser(data);
+        localStorage.setItem('chapp_user', JSON.stringify(data));
+        return true;
+      }
+    } catch (err) {
+      console.error('❌ Failed to save banner to backend:', err);
+    }
+    return false;
+  };
+
+  const handleBannerUpload = async (e) => {
+    let file = e.target.files?.[0];
+    if (!file) return;
+
+    setBannerUploading(true);
+    setProfileStatusMessage({ text: 'Uploading banner...', type: 'info' });
+
+    // Compress banner to a reasonable size (max 1200px wide)
+    try {
+      file = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+          const img = new Image();
+          img.src = event.target.result;
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const maxW = 1200;
+            let { width, height } = img;
+            if (width > maxW) { height *= maxW / width; width = maxW; }
+            canvas.width = width;
+            canvas.height = height;
+            canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+            canvas.toBlob((blob) => {
+              resolve(blob ? new File([blob], file.name, { type: 'image/jpeg' }) : file);
+            }, 'image/jpeg', 0.88);
+          };
+          img.onerror = () => resolve(file);
+        };
+        reader.onerror = () => resolve(file);
+      });
+    } catch (err) {
+      console.warn('Banner compression failed, using original', err);
+    }
+
+    const token = localStorage.getItem('chapp_token');
+
+    // Layer 1: Signed Cloudinary
+    try {
+      if (!token) throw new Error('Not authenticated');
+      const signRes = await fetch(`${BACKEND_URL}/api/cloudinary/sign`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!signRes.ok) throw new Error('Sign endpoint unavailable');
+      const { signature, timestamp, folder, apiKey, cloudName } = await signRes.json();
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('api_key', apiKey);
+      formData.append('timestamp', timestamp);
+      formData.append('signature', signature);
+      formData.append('folder', folder);
+      const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, { method: 'POST', body: formData });
+      if (!uploadRes.ok) throw new Error('Signed upload failed');
+      const { secure_url } = await uploadRes.json();
+      await saveBannerToBackend(secure_url, token);
+      setProfileStatusMessage({ text: 'Banner updated!', type: 'success' });
+      setBannerUploading(false);
+      return;
+    } catch (l1) { console.warn('Banner Layer 1 failed:', l1.message); }
+
+    // Layer 2: Unsigned Cloudinary
+    try {
+      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'dlw5v5zot';
+      const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'avatar_preset';
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', uploadPreset);
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, { method: 'POST', body: formData });
+      if (!res.ok) throw new Error('Unsigned upload failed');
+      const { secure_url } = await res.json();
+      await saveBannerToBackend(secure_url, token);
+      setProfileStatusMessage({ text: 'Banner updated!', type: 'success' });
+      setBannerUploading(false);
+      return;
+    } catch (l2) { console.warn('Banner Layer 2 failed:', l2.message); }
+
+    // Layer 3: Self-hosted
+    try {
+      if (!token) throw new Error('Not authenticated');
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(`${BACKEND_URL}/api/media/upload`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData });
+      if (!res.ok) throw new Error('Server upload failed');
+      const { url } = await res.json();
+      await saveBannerToBackend(url, token);
+      setProfileStatusMessage({ text: 'Banner updated!', type: 'success' });
+    } catch (l3) {
+      console.error('❌ All banner upload layers failed:', l3.message);
+      setProfileStatusMessage({ text: `Banner upload failed: ${l3.message}`, type: 'error' });
+    } finally {
+      setBannerUploading(false);
     }
   };
 
@@ -1775,20 +1890,62 @@ export default function ChatPage() {
           {activeTab === 'profile' && (
             <div className="pb-8" style={{ background: 'var(--bg)' }}>
               {/* ── Hero Banner ── */}
-              <div
-                className="relative shrink-0 overflow-hidden"
+              <label
+                className="relative shrink-0 overflow-hidden group"
                 style={{
                   height: '140px',
-                  background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 40%, #ec4899 80%, #f97316 100%)',
+                  display: 'block',
+                  cursor: bannerUploading ? 'wait' : 'pointer',
+                  background: currentUser?.banner
+                    ? 'transparent'
+                    : 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 40%, #ec4899 80%, #f97316 100%)',
                 }}
+                title="Click to change banner"
               >
-                {/* Decorative orbs */}
-                <div style={{ position: 'absolute', top: '-30px', left: '-20px', width: '120px', height: '120px', borderRadius: '50%', background: 'rgba(255,255,255,0.10)', filter: 'blur(20px)' }} />
-                <div style={{ position: 'absolute', bottom: '-20px', right: '30px', width: '90px', height: '90px', borderRadius: '50%', background: 'rgba(255,255,255,0.08)', filter: 'blur(16px)' }} />
-                <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', width: '160px', height: '60px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)', filter: 'blur(12px)' }} />
+                {/* Banner image (if set) */}
+                {currentUser?.banner && (
+                  <img
+                    src={currentUser.banner}
+                    alt="banner"
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                    onError={(e) => { e.target.style.display = 'none'; }}
+                  />
+                )}
+                {/* Gradient fallback overlay when no banner */}
+                {!currentUser?.banner && (
+                  <>
+                    <div style={{ position: 'absolute', top: '-30px', left: '-20px', width: '120px', height: '120px', borderRadius: '50%', background: 'rgba(255,255,255,0.10)', filter: 'blur(20px)' }} />
+                    <div style={{ position: 'absolute', bottom: '-20px', right: '30px', width: '90px', height: '90px', borderRadius: '50%', background: 'rgba(255,255,255,0.08)', filter: 'blur(16px)' }} />
+                    <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', width: '160px', height: '60px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)', filter: 'blur(12px)' }} />
+                  </>
+                )}
+                {/* Hover camera overlay */}
+                <div
+                  className="absolute inset-0 flex flex-col items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                  style={{ background: 'rgba(0,0,0,0.38)', backdropFilter: 'blur(2px)' }}
+                >
+                  {bannerUploading ? (
+                    <RefreshCw className="w-6 h-6 text-white animate-spin" />
+                  ) : (
+                    <>
+                      <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                      </svg>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#fff', letterSpacing: '0.04em' }}>Change Banner</span>
+                    </>
+                  )}
+                </div>
+                {/* Hidden file input */}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleBannerUpload}
+                  disabled={bannerUploading}
+                />
                 {/* Settings button */}
                 <button
-                  onClick={() => { setSettingsTab('profile'); setShowSettings(true); }}
+                  onClick={(e) => { e.preventDefault(); setSettingsTab('profile'); setShowSettings(true); }}
                   className="absolute top-3 right-3 flex items-center gap-1.5 text-white border-none cursor-pointer transition-all hover:scale-105 active:scale-95"
                   style={{
                     background: 'rgba(255,255,255,0.18)',
@@ -1805,7 +1962,7 @@ export default function ChatPage() {
                   <Settings className="w-3.5 h-3.5" />
                   <span>Edit</span>
                 </button>
-              </div>
+              </label>
 
               {/* ── Avatar + Identity ── */}
               <div
