@@ -2659,18 +2659,17 @@ export default function ChatPage() {
                     <div
                       key={msg.id}
                       style={{
+                        position: 'relative',
                         display: 'flex',
                         justifyContent: isMe ? 'flex-end' : 'flex-start',
                         marginTop: isSameGroup ? '2px' : '10px',
                         paddingLeft: isMe ? '52px' : '0',
                         paddingRight: isMe ? '0' : '52px',
+                        paddingTop: '6px',
                       }}
                       onMouseEnter={() => setHoveredMsgId(msg.id)}
                       onMouseLeave={() => { setHoveredMsgId(null); if (emojiPickerMsgId === msg.id) setEmojiPickerMsgId(null); }}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        setDeleteTarget({ id: msg.id, senderId: msg.senderId, receiverId: msg.receiverId });
-                      }}
+                      onContextMenu={(e) => e.preventDefault()}
                       onTouchStart={(e) => {
                         touchData.current = { startX: e.touches[0].clientX, startY: e.touches[0].clientY, isHorizontal: null };
                         longPressTimerRef.current = setTimeout(() => {
@@ -2700,6 +2699,10 @@ export default function ChatPage() {
                         if (iconEl) { iconEl.style.opacity = '0'; iconEl.style.transform = 'scale(0)'; }
                         if (touchData.current.isHorizontal && deltaX > 55) {
                           setReplyingTo({ id: msg.id, text: msg.text, senderId: msg.senderId, _selfId: currentUser?.id });
+                          // Flash the source message and scroll reply bar into view
+                          const srcBubble = e.currentTarget.querySelector('.swipe-bubble');
+                          if (srcBubble) { srcBubble.style.transition = 'background 0.15s'; srcBubble.style.filter = 'brightness(1.3)'; setTimeout(() => { srcBubble.style.filter = ''; }, 350); }
+                          setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
                         }
                         if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
                         touchData.current.isHorizontal = null;
