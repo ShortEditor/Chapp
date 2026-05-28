@@ -71,8 +71,8 @@ export function SocketProvider({ children }) {
 
   const sharedKeyCacheRef = useRef(new Map());
 
-  const getSharedKey = useCallback(async (friendId) => {
-    if (sharedKeyCacheRef.current.has(friendId)) {
+  const getSharedKey = useCallback(async (friendId, forceRefresh = false) => {
+    if (!forceRefresh && sharedKeyCacheRef.current.has(friendId)) {
       return sharedKeyCacheRef.current.get(friendId);
     }
     
@@ -91,14 +91,14 @@ export function SocketProvider({ children }) {
     let friend = await db.friends.get(friendId);
     let friendPublicKeyJwk = null;
     
-    if (friend && friend.publicKey) {
+    if (!forceRefresh && friend && friend.publicKey) {
       try {
         friendPublicKeyJwk = typeof friend.publicKey === 'string' ? JSON.parse(friend.publicKey) : friend.publicKey;
       } catch (_) {}
     }
 
     if (!friendPublicKeyJwk) {
-      console.log(`🔑 [E2EE] Fetching public key for friend ${friendId} from server...`);
+      console.log(`🔑 [E2EE] Fetching public key for friend ${friendId} from server (forceRefresh: ${forceRefresh})...`);
       try {
         const res = await fetch(`${BACKEND_URL}/api/keys/public/${friendId}`, {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -110,6 +110,8 @@ export function SocketProvider({ children }) {
             // Cache in friends DB
             if (friend) {
               await db.friends.update(friendId, { publicKey: data.publicKey });
+            } else {
+              await db.friends.put({ id: friendId, publicKey: data.publicKey });
             }
           }
         }
@@ -665,7 +667,7 @@ export function SocketProvider({ children }) {
         let decryptedMediaUrl = mediaUrl || null;
 
         if (isEncrypted && !isGroup) {
-          const sharedKey = await getSharedKey(senderId);
+          let sharedKey = await getSharedKey(senderId);
           if (sharedKey) {
             try {
               if (text) {
@@ -675,8 +677,25 @@ export function SocketProvider({ children }) {
                 decryptedMediaUrl = await decryptWithSharedKey(mediaUrl, sharedKey);
               }
             } catch (err) {
-              console.error('❌ [E2EE] Decryption failed for realtime message:', err);
-              decryptedText = '🔒 [Decryption error: Failed to decrypt message]';
+              console.warn('❌ [E2EE] Realtime decryption failed with cached shared key. Attempting self-healing key sync...', err);
+              try {
+                // Force sync and refresh from server
+                const freshKey = await getSharedKey(senderId, true);
+                if (freshKey) {
+                  if (text) {
+                    decryptedText = await decryptWithSharedKey(text, freshKey);
+                  }
+                  if (mediaUrl) {
+                    decryptedMediaUrl = await decryptWithSharedKey(mediaUrl, freshKey);
+                  }
+                  console.log('✅ [E2EE] Realtime decryption successfully healed after key sync!');
+                } else {
+                  decryptedText = '🔒 [Decryption error: Failed to decrypt message]';
+                }
+              } catch (retryErr) {
+                console.error('❌ [E2EE] Realtime decryption failed even after key sync:', retryErr);
+                decryptedText = '🔒 [Decryption error: Failed to decrypt message]';
+              }
             }
           } else {
             console.warn('⚠️ [E2EE] No shared key for decryption of realtime message');
@@ -725,7 +744,7 @@ export function SocketProvider({ children }) {
           let decryptedMediaUrl = mediaUrl || null;
 
           if (isEncrypted && !isGroup) {
-            const sharedKey = await getSharedKey(senderId);
+            let sharedKey = await getSharedKey(senderId);
             if (sharedKey) {
               try {
                 if (text) {
@@ -735,8 +754,25 @@ export function SocketProvider({ children }) {
                   decryptedMediaUrl = await decryptWithSharedKey(mediaUrl, sharedKey);
                 }
               } catch (err) {
-                console.error('❌ [E2EE] Decryption failed for offline message:', err);
-                decryptedText = '🔒 [Decryption error: Failed to decrypt message]';
+                console.warn('❌ [E2EE] Offline decryption failed with cached shared key. Attempting self-healing key sync...', err);
+                try {
+                  // Force sync and refresh from server
+                  const freshKey = await getSharedKey(senderId, true);
+                  if (freshKey) {
+                    if (text) {
+                      decryptedText = await decryptWithSharedKey(text, freshKey);
+                    }
+                    if (mediaUrl) {
+                      decryptedMediaUrl = await decryptWithSharedKey(mediaUrl, freshKey);
+                    }
+                    console.log('✅ [E2EE] Offline decryption successfully healed after key sync!');
+                  } else {
+                    decryptedText = '🔒 [Decryption error: Failed to decrypt message]';
+                  }
+                } catch (retryErr) {
+                  console.error('❌ [E2EE] Offline decryption failed even after key sync:', retryErr);
+                  decryptedText = '🔒 [Decryption error: Failed to decrypt message]';
+                }
               }
             } else {
               console.warn('⚠️ [E2EE] No shared key for decryption of offline message');
