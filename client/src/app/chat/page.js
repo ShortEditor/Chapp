@@ -2125,7 +2125,7 @@ export default function ChatPage() {
                 </button>
               </div>
             </div>
-          )}          )}
+          )}
         </div>
 
         {/* Bottom Navigation */}
