@@ -5213,7 +5213,7 @@ export default function ChatPage() {
                     </div>
                   )}
                   <div>
-                    <div className="font-bold text-sm text-slate-200">{activeStoryGroup.username}</div>
+                    <div className="font-bold text-sm text-slate-200">{renderUsername(activeStoryGroup.username)}</div>
                     <div className="text-xs text-slate-400">
                       {new Date(activeStoryGroup.items[currentStoryIndex]?.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </div>
