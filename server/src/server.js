@@ -1087,6 +1087,7 @@ app.get('/api/friends/suggestions', authenticateToken, async (req, res) => {
                 id: candidate.id,
                 username: candidate.username,
                 avatar: candidate.avatar,
+                banner: candidate.banner,
                 bio: candidate.bio,
                 mutualFriends: []
               });
@@ -1102,6 +1103,7 @@ app.get('/api/friends/suggestions', authenticateToken, async (req, res) => {
                 id: candidate.id,
                 username: candidate.username,
                 avatar: candidate.avatar,
+                banner: candidate.banner,
                 bio: candidate.bio,
                 mutualFriends: []
               });
@@ -1129,6 +1131,7 @@ app.get('/api/friends/suggestions', authenticateToken, async (req, res) => {
         id: u.id,
         username: u.username,
         avatar: u.avatar,
+        banner: u.banner,
         bio: u.bio,
         mutualFriends: []
       }));
@@ -1173,6 +1176,7 @@ app.get('/api/friends', authenticateToken, async (req, res) => {
           id: targetUser.id,
           username: targetUser.username,
           avatar: targetUser.avatar,
+          banner: targetUser.banner,
           bio: targetUser.bio,
           status: targetUser.status,
           publicKey: targetUser.publicKey || null
