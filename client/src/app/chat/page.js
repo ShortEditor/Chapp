@@ -369,15 +369,15 @@ const MessageInputBar = React.memo(({ onSendMessage, pendingMedia, uploading, fi
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="flex items-center gap-4">
+      <form onSubmit={handleSubmit} className="flex items-center gap-2 md:gap-4 w-full min-w-0">
         <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*,video/*,application/*" />
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1 md:gap-1.5 shrink-0">
           <button
             type="button"
             onClick={triggerFileSelector}
             disabled={uploading}
-            className="p-3 rounded-full transition-colors"
+            className="p-2 md:p-3 rounded-full transition-colors"
             style={{ color: 'var(--text-muted)' }}
             onMouseEnter={e => e.currentTarget.style.background = 'var(--border-light)'}
             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
@@ -388,7 +388,7 @@ const MessageInputBar = React.memo(({ onSendMessage, pendingMedia, uploading, fi
           <button
             type="button"
             onClick={() => setIsGifPickerOpen(!isGifPickerOpen)}
-            className="px-3 py-1 rounded-full flex items-center justify-center transition-all text-xs font-extrabold select-none shrink-0"
+            className="px-2.5 py-0.5 md:px-3 md:py-1 rounded-full flex items-center justify-center transition-all text-xs font-extrabold select-none shrink-0"
             style={{
               color: isGifPickerOpen ? 'var(--primary)' : 'var(--text-muted)',
               background: isGifPickerOpen ? 'var(--primary-light)' : 'transparent',
@@ -396,7 +396,8 @@ const MessageInputBar = React.memo(({ onSendMessage, pendingMedia, uploading, fi
               cursor: 'pointer',
               letterSpacing: '0.04em',
               fontFamily: 'var(--font-jakarta)',
-              height: '32px'
+              height: '30px',
+              minWidth: '38px'
             }}
           >
             GIF
@@ -410,14 +411,14 @@ const MessageInputBar = React.memo(({ onSendMessage, pendingMedia, uploading, fi
           value={inputText}
           onChange={e => setInputText(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="msg-field"
+          className="msg-field min-w-0"
           style={replyingTo ? { borderColor: 'var(--primary)', boxShadow: '0 0 0 2px rgba(99,102,241,0.15)' } : {}}
         />
 
         <button
           type="submit"
           disabled={!inputText.trim() && !pendingMedia}
-          className="w-11 h-11 rounded-full text-white shrink-0 flex items-center justify-center transition-all disabled:opacity-40 disabled:pointer-events-none hover:scale-105 active:scale-95 shadow-md border-none cursor-pointer"
+          className="w-10 h-10 md:w-11 md:h-11 rounded-full text-white shrink-0 flex items-center justify-center transition-all disabled:opacity-40 disabled:pointer-events-none hover:scale-105 active:scale-95 shadow-md border-none cursor-pointer"
           style={{
             background: replyingTo
               ? 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)'
@@ -2889,7 +2890,7 @@ export default function ChatPage() {
           CHAT PANEL
           ═══════════════════════════════════════ */}
       <div
-        className={`flex-1 h-full flex flex-col ${!activeFriend ? 'hidden md:flex' : 'flex'}`}
+        className={`flex-1 h-full flex flex-col min-w-0 ${!activeFriend ? 'hidden md:flex' : 'flex'}`}
         style={{ background: 'var(--chat-bg)' }}
       >
         {activeFriend ? (
