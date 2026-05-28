@@ -8,6 +8,7 @@ import db from '@/db/localDb';
 import { triggerPwaInstallation } from '@/components/PwaManager';
 import {
   Send,
+  Search,
   Paperclip,
   Smile,
   LogOut,
@@ -230,11 +231,16 @@ const MOCK_GIFS = [
 ];
 
 const STORIES_MUSIC_LIBRARY = [
-  { title: "Lofi Sunset Chill 🌅", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" },
-  { title: "Acoustic Morning Breeze 🍃", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3" },
-  { title: "Synthwave Highway 🌌", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3" },
-  { title: "Chill Lounge Beats ☕", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3" },
-  { title: "Summer Wave Instrumental 🌊", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3" },
+  { id: "1", title: "Blinding Lights", artist: "The Weeknd", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", duration: "3:20", cover: "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=80&q=80" },
+  { id: "2", title: "As It Was", artist: "Harry Styles", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", duration: "2:47", cover: "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=80&q=80" },
+  { id: "3", title: "Flowers", artist: "Miley Cyrus", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", duration: "3:20", cover: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=80&q=80" },
+  { id: "4", title: "Stay", artist: "The Kid LAROI & Justin Bieber", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3", duration: "2:21", cover: "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=80&q=80" },
+  { id: "5", title: "Shape of You", artist: "Ed Sheeran", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3", duration: "3:53", cover: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=80&q=80" },
+  { id: "6", title: "Starboy", artist: "The Weeknd", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3", duration: "3:50", cover: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=80&q=80" },
+  { id: "7", title: "Bad Guy", artist: "Billie Eilish", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3", duration: "3:14", cover: "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=80&q=80" },
+  { id: "8", title: "Levitating", artist: "Dua Lipa", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3", duration: "3:23", cover: "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=80&q=80" },
+  { id: "9", title: "Perfect", artist: "Ed Sheeran", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3", duration: "4:23", cover: "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=80&q=80" },
+  { id: "10", title: "Someone You Loved", artist: "Lewis Capaldi", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3", duration: "3:02", cover: "https://images.unsplash.com/photo-1487180142328-0c4e37023af5?w=80&q=80" },
 ];
 
 const MessageInputBar = React.memo(({ onSendMessage, pendingMedia, uploading, fileInputRef, triggerFileSelector, handleFileUpload, emitTyping, activeFriendId, replyingTo, onCancelReply, onSendGif, isSnapMode, setIsSnapMode, openCamera }) => {
@@ -664,6 +670,7 @@ export default function ChatPage() {
 
   // Story Music states
   const [selectedMusic, setSelectedMusic] = useState(null); // { title, url }
+  const [musicSearchQuery, setMusicSearchQuery] = useState('');
   const [isStoryMusicMuted, setIsStoryMusicMuted] = useState(false);
 
   // Viewed By list overlay state
@@ -4941,8 +4948,8 @@ export default function ChatPage() {
           className="modal-overlay animate-fade-in"
           style={{
             zIndex: 10010,
-            background: 'rgba(10, 11, 14, 0.85)',
-            backdropFilter: 'blur(12px)',
+            background: 'rgba(5, 6, 8, 0.9)',
+            backdropFilter: 'blur(15px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -4957,21 +4964,22 @@ export default function ChatPage() {
           }}
         >
           <div 
-            className="animate-zoom-in p-6 rounded-2xl w-full max-w-md border border-slate-800"
+            className="animate-zoom-in p-6 rounded-3xl w-full max-w-md border border-slate-850/80"
             style={{
-              background: '#0f111a',
-              boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
+              background: 'linear-gradient(180deg, #0e1017 0%, #08090d 100%)',
+              boxShadow: '0 30px 60px rgba(0,0,0,0.6)'
             }}
             onClick={e => e.stopPropagation()}
           >
             <div className="flex justify-between items-center mb-5">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-pink-500" /> Share a Story
+              <h3 className="text-base font-extrabold text-white flex items-center gap-2 tracking-wide">
+                <Sparkles className="w-5 h-5 text-pink-500 animate-pulse" /> Share a Story
               </h3>
               <button 
                 disabled={isUploadingStory}
+                type="button"
                 onClick={() => setIsPostingStory(false)}
-                className="p-1 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white border-none bg-transparent cursor-pointer disabled:opacity-50"
+                className="p-1.5 rounded-full hover:bg-slate-800/80 text-slate-400 hover:text-white border-none bg-transparent cursor-pointer disabled:opacity-50 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -4979,7 +4987,7 @@ export default function ChatPage() {
 
             <form onSubmit={handlePostStory} className="space-y-4">
               <div className="flex gap-3">
-                <div className="flex-1 border-2 border-dashed border-slate-800 rounded-xl p-4 text-center hover:border-pink-500/50 transition-all duration-200 relative cursor-pointer group bg-slate-950/40">
+                <div className="flex-1 border border-slate-800 hover:border-pink-500/40 rounded-2xl p-4 text-center transition-all duration-200 relative cursor-pointer group bg-slate-950/40 shadow-inner">
                   <input 
                     type="file" 
                     accept="image/*,video/*" 
@@ -4988,15 +4996,15 @@ export default function ChatPage() {
                     onChange={(e) => setStoryFile(e.target.files?.[0] || null)}
                     className="absolute inset-0 opacity-0 cursor-pointer z-10"
                   />
-                  <Upload className="w-6 h-6 mx-auto text-slate-500 group-hover:text-pink-500 transition-colors mb-1" />
+                  <Upload className="w-5 h-5 mx-auto text-slate-500 group-hover:text-pink-500 transition-colors mb-1.5" />
                   {storyFile ? (
-                    <div className="text-[11px] font-semibold text-pink-400 truncate max-w-[120px] mx-auto">
+                    <div className="text-[10px] font-bold text-pink-400 truncate max-w-[120px] mx-auto">
                       {storyFile.name}
                     </div>
                   ) : (
                     <div>
-                      <div className="text-xs font-semibold text-slate-300">Upload File</div>
-                      <div className="text-[9px] text-slate-500 mt-0.5">Image / Video</div>
+                      <div className="text-xs font-bold text-slate-200">Upload Media</div>
+                      <div className="text-[9px] text-slate-500 mt-0.5">Image or Video</div>
                     </div>
                   )}
                 </div>
@@ -5004,36 +5012,62 @@ export default function ChatPage() {
                 <button
                   type="button"
                   onClick={() => openCamera('story')}
-                  className="flex-1 border-2 border-dashed border-slate-800 rounded-xl p-4 text-center hover:border-pink-500/50 transition-all duration-200 flex flex-col items-center justify-center gap-1 bg-slate-950/40 cursor-pointer group"
+                  className="flex-1 border border-slate-800 hover:border-pink-500/40 rounded-2xl p-4 text-center transition-all duration-200 flex flex-col items-center justify-center gap-1 bg-slate-950/40 cursor-pointer group shadow-inner"
                 >
-                  <Camera className="w-6 h-6 text-slate-500 group-hover:text-pink-500 transition-colors mb-1" />
-                  <span className="text-xs font-semibold text-slate-300 group-hover:text-pink-400">Live Camera</span>
-                  <span className="text-[9px] text-slate-500">Take Photo</span>
+                  <Camera className="w-5 h-5 text-slate-500 group-hover:text-pink-500 transition-colors mb-1" />
+                  <span className="text-xs font-bold text-slate-200 group-hover:text-pink-400 transition-colors block">Live Camera</span>
+                  <span className="text-[9px] text-slate-500 block">Take Photo</span>
                 </button>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1.5 flex items-center gap-1">
-                  <Music className="w-3.5 h-3.5 text-pink-500 animate-bounce" /> Add Soundtrack (Instagram Style)
+                <label className="block text-xs font-bold text-slate-300 mb-1.5 flex items-center gap-1">
+                  <Music className="w-3.5 h-3.5 text-pink-500 animate-bounce" /> Instagram Music Library
                 </label>
-                <div className="flex flex-col gap-1.5 max-h-[140px] overflow-y-auto p-1.5 bg-slate-950/60 rounded-xl border border-slate-800/80 custom-scrollbar">
-                  {STORIES_MUSIC_LIBRARY.map((music) => {
+                
+                {/* Search Bar */}
+                <div className="relative mb-2">
+                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                    <Search className="w-3.5 h-3.5 text-slate-500" />
+                  </span>
+                  <input 
+                    type="text" 
+                    placeholder="Search songs, artists..." 
+                    value={musicSearchQuery}
+                    onChange={(e) => setMusicSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 bg-slate-950 border border-slate-850 text-slate-200 text-xs rounded-xl focus:outline-none focus:border-pink-500/40 transition-colors"
+                  />
+                </div>
+
+                {/* Music lists */}
+                <div className="flex flex-col gap-1.5 max-h-[140px] overflow-y-auto p-1.5 bg-slate-950/80 rounded-2xl border border-slate-850 custom-scrollbar">
+                  {STORIES_MUSIC_LIBRARY.filter(m => 
+                    m.title.toLowerCase().includes(musicSearchQuery.toLowerCase()) || 
+                    m.artist.toLowerCase().includes(musicSearchQuery.toLowerCase())
+                  ).map((music) => {
                     const isSelected = selectedMusic?.url === music.url;
                     return (
                       <div 
-                        key={music.url}
+                        key={music.id}
                         onClick={() => setSelectedMusic(isSelected ? null : music)}
-                        className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-all ${isSelected ? 'bg-pink-500/10 border border-pink-500/30' : 'bg-slate-900/40 hover:bg-slate-900/80 border border-transparent'}`}
+                        className={`flex items-center justify-between p-2 rounded-xl cursor-pointer transition-all ${isSelected ? 'bg-pink-500/10 border border-pink-500/30' : 'bg-slate-900/40 hover:bg-slate-900/80 border border-transparent'}`}
                       >
-                        <span className="text-[11px] text-slate-300 font-medium truncate flex items-center gap-2">
-                          <Music className={`w-3.5 h-3.5 ${isSelected ? 'text-pink-500 animate-pulse' : 'text-slate-500'}`} />
-                          {music.title}
-                        </span>
-                        {isSelected ? (
-                          <div className="w-4 h-4 rounded-full bg-pink-500 flex items-center justify-center text-[10px] text-white font-bold">✓</div>
-                        ) : (
-                          <div className="text-[10px] text-slate-500 hover:text-slate-300 transition-colors font-medium">Select</div>
-                        )}
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <img src={music.cover} className="w-8 h-8 rounded-lg object-cover border border-white/10 shrink-0" />
+                          <div className="truncate">
+                            <div className="text-[11px] font-extrabold text-slate-100 truncate">{music.title}</div>
+                            <div className="text-[9px] text-slate-400 truncate">{music.artist}</div>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-[8px] text-slate-500 font-mono">{music.duration}</span>
+                          {isSelected ? (
+                            <div className="w-4 h-4 rounded-full bg-pink-500 flex items-center justify-center text-[10px] text-white font-bold">✓</div>
+                          ) : (
+                            <div className="text-[9px] text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-md font-semibold hover:text-white transition-colors">Use</div>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -5041,7 +5075,7 @@ export default function ChatPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Caption</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Caption</label>
                 <input 
                   type="text"
                   placeholder="What's on your mind?..."
@@ -5049,7 +5083,7 @@ export default function ChatPage() {
                   disabled={isUploadingStory}
                   onChange={(e) => setStoryCaption(e.target.value)}
                   className="msg-field w-full"
-                  style={{ borderRadius: '10px', height: '42px', background: '#07080d' }}
+                  style={{ borderRadius: '12px', height: '42px', background: '#050609', border: '1px solid var(--border-light)' }}
                 />
               </div>
 
