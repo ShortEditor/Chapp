@@ -6,6 +6,11 @@ export const metadata = {
   title: "Chapp — Privacy-First Realtime Messaging",
   description: "A secure, privacy-focused realtime messaging platform where users own their conversations. No permanent server storage.",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
