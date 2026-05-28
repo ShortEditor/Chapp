@@ -43,7 +43,8 @@ import {
   User,
   Trash2,
   Mail,
-  AlertCircle
+  AlertCircle,
+  SquarePen
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { encryptData, decryptData } from '@/lib/crypto';
@@ -1411,14 +1412,14 @@ export default function ChatPage() {
           </div>
           <div className="flex items-center gap-1.5">
             <button
-              onClick={() => setShowSettings(true)}
+              onClick={() => { setActiveTab('friends'); }}
               className="p-2 rounded-full transition-colors"
               style={{ color: 'var(--text-muted)' }}
-              onMouseEnter={e => e.currentTarget.style.background = 'var(--border-light)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-              title="Settings"
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--border-light)'; e.currentTarget.style.color = 'var(--primary)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+              title="New chat"
             >
-              <Settings className="w-5 h-5" />
+              <SquarePen className="w-5 h-5" />
             </button>
             {activeTab !== 'chats' && (
               <button
@@ -1941,25 +1942,6 @@ export default function ChatPage() {
                   onChange={handleBannerUpload}
                   disabled={bannerUploading}
                 />
-                {/* Settings button */}
-                <button
-                  onClick={(e) => { e.preventDefault(); setSettingsTab('profile'); setShowSettings(true); }}
-                  className="absolute top-3 right-3 flex items-center gap-1.5 text-white border-none cursor-pointer transition-all hover:scale-105 active:scale-95"
-                  style={{
-                    background: 'rgba(255,255,255,0.18)',
-                    backdropFilter: 'blur(10px)',
-                    borderRadius: '20px',
-                    padding: '6px 12px',
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    fontFamily: 'var(--font-jakarta)',
-                    border: '1px solid rgba(255,255,255,0.25)',
-                  }}
-                  title="Edit Profile Settings"
-                >
-                  <Settings className="w-3.5 h-3.5" />
-                  <span>Edit</span>
-                </button>
               </label>
 
               {/* ── Avatar + Identity ── */}
