@@ -1485,7 +1485,7 @@ app.post('/api/cloudinary/sign', authenticateToken, (req, res) => {
     }
 
     const timestamp = Math.round((new Date()).getTime() / 1000);
-    const folder = 'avatars';
+    const folder = req.body?.folder || 'avatars';
     
     // Sort and calculate signature
     const paramString = `folder=${folder}&timestamp=${timestamp}`;

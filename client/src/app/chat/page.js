@@ -1616,10 +1616,101 @@ export default function ChatPage() {
 
     setUploading(true);
     const token = localStorage.getItem('chapp_token');
-    const formData = new FormData();
-    formData.append('file', file);
 
+    // Layer 1: Secure Signed Cloudinary Upload
     try {
+      console.log('☁️ [Cloudinary] Attempting secure signed attachment upload...');
+      if (!token) throw new Error('Not authenticated');
+
+      const signRes = await fetch(`${BACKEND_URL}/api/cloudinary/sign`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ folder: 'attachments' })
+      });
+
+      if (!signRes.ok) {
+        throw new Error('Signed upload endpoint not available or returned error');
+      }
+
+      const signData = await signRes.json();
+      const { signature, timestamp, folder, apiKey, cloudName } = signData;
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('api_key', apiKey);
+      formData.append('timestamp', timestamp);
+      formData.append('signature', signature);
+      formData.append('folder', folder);
+
+      const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error('Signed Cloudinary upload failed');
+      }
+
+      const uploadData = await uploadRes.json();
+      const imageUrl = uploadData.secure_url;
+      const mediaType = uploadData.resource_type === 'image' ? 'image' : uploadData.resource_type === 'video' ? 'video' : 'application';
+
+      setPendingMedia({
+        url: imageUrl,
+        type: mediaType,
+        name: file.name
+      });
+      setUploading(false);
+      return;
+    } catch (layer1Err) {
+      console.warn('☁️ [Cloudinary] Layer 1 Signed Attachment Upload failed:', layer1Err.message);
+    }
+
+    // Layer 2: Unsigned Cloudinary Upload (Fallback)
+    try {
+      console.log('☁️ [Cloudinary] Attempting unsigned fallback upload...');
+      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'dlw5v5zot';
+      const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'avatar_preset';
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', uploadPreset);
+
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!res.ok) {
+        throw new Error('Unsigned upload failed');
+      }
+
+      const data = await res.json();
+      const imageUrl = data.secure_url;
+      const mediaType = data.resource_type === 'image' ? 'image' : data.resource_type === 'video' ? 'video' : 'application';
+
+      setPendingMedia({
+        url: imageUrl,
+        type: mediaType,
+        name: file.name
+      });
+      setUploading(false);
+      return;
+    } catch (layer2Err) {
+      console.warn('☁️ [Cloudinary] Layer 2 Unsigned Upload failed:', layer2Err.message);
+    }
+
+    // Layer 3: Self-Hosted Server Fallback
+    try {
+      console.log('💻 [Server] Attempting self-hosted fallback upload...');
+      if (!token) throw new Error('Not authenticated');
+
+      const formData = new FormData();
+      formData.append('file', file);
+
       const response = await fetch(`${BACKEND_URL}/api/media/upload`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
@@ -1637,9 +1728,9 @@ export default function ChatPage() {
         type: data.mediaType,
         name: data.originalName
       });
-    } catch (err) {
-      console.error(err);
-      alert('Upload failed: ' + err.message);
+    } catch (layer3Err) {
+      console.error('❌ All media upload layers failed:', layer3Err.message);
+      alert('Upload failed: ' + layer3Err.message);
     } finally {
       setUploading(false);
     }
