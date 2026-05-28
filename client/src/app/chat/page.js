@@ -291,6 +291,7 @@ export default function ChatPage() {
   const [replyingTo, setReplyingTo] = useState(null);
   const [hoveredMsgId, setHoveredMsgId] = useState(null);
   const [emojiPickerMsgId, setEmojiPickerMsgId] = useState(null);
+  const [msgActionSheet, setMsgActionSheet] = useState(null); // { msg, isMe }
   const [draftSocialLinks, setDraftSocialLinks] = useState({});
   const [customStatus, setCustomStatus] = useState('');
 
@@ -330,6 +331,7 @@ export default function ChatPage() {
   // Message delete (unsend) states
   const [deleteTarget, setDeleteTarget] = useState(null); // { id, senderId, receiverId }
   const longPressTimerRef = useRef(null);
+  const touchData = useRef({ startX: 0, startY: 0, isHorizontal: null });
 
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -2669,47 +2671,64 @@ export default function ChatPage() {
                         e.preventDefault();
                         setDeleteTarget({ id: msg.id, senderId: msg.senderId, receiverId: msg.receiverId });
                       }}
-                      onTouchStart={() => {
+                      onTouchStart={(e) => {
+                        touchData.current = { startX: e.touches[0].clientX, startY: e.touches[0].clientY, isHorizontal: null };
                         longPressTimerRef.current = setTimeout(() => {
-                          setEmojiPickerMsgId(msg.id);
+                          setMsgActionSheet({ msg, isMe });
                         }, 500);
                       }}
-                      onTouchEnd={() => {
-                        if (longPressTimerRef.current) {
-                          clearTimeout(longPressTimerRef.current);
-                          longPressTimerRef.current = null;
+                      onTouchMove={(e) => {
+                        const deltaX = e.touches[0].clientX - touchData.current.startX;
+                        const deltaY = e.touches[0].clientY - touchData.current.startY;
+                        if (touchData.current.isHorizontal === null) {
+                          touchData.current.isHorizontal = Math.abs(deltaX) > Math.abs(deltaY) + 5;
+                        }
+                        if (touchData.current.isHorizontal && deltaX > 0) {
+                          if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
+                          const clampedX = Math.min(deltaX, 75);
+                          const bubbleEl = e.currentTarget.querySelector('.swipe-bubble');
+                          if (bubbleEl) bubbleEl.style.transform = `translateX(${clampedX}px)`;
+                          const iconEl = e.currentTarget.querySelector('.swipe-icon');
+                          if (iconEl) { const p = Math.min(clampedX / 55, 1); iconEl.style.opacity = p.toString(); iconEl.style.transform = `scale(${p})`; }
                         }
                       }}
-                      onTouchMove={() => {
-                        if (longPressTimerRef.current) {
-                          clearTimeout(longPressTimerRef.current);
-                          longPressTimerRef.current = null;
+                      onTouchEnd={(e) => {
+                        const deltaX = e.changedTouches[0].clientX - touchData.current.startX;
+                        const bubbleEl = e.currentTarget.querySelector('.swipe-bubble');
+                        if (bubbleEl) { bubbleEl.style.transition = 'transform 0.3s cubic-bezier(0.34,1.56,0.64,1)'; bubbleEl.style.transform = 'translateX(0)'; setTimeout(() => { if (bubbleEl) bubbleEl.style.transition = ''; }, 300); }
+                        const iconEl = e.currentTarget.querySelector('.swipe-icon');
+                        if (iconEl) { iconEl.style.opacity = '0'; iconEl.style.transform = 'scale(0)'; }
+                        if (touchData.current.isHorizontal && deltaX > 55) {
+                          setReplyingTo({ id: msg.id, text: msg.text, senderId: msg.senderId, _selfId: currentUser?.id });
                         }
+                        if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
+                        touchData.current.isHorizontal = null;
                       }}
                     >
-                      {/* Hover action row */}
+                      {/* Hover action row — absolutely positioned, zero layout impact, desktop only */}
                       {hoveredMsgId === msg.id && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '3px', justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
-                          {/* Reply btn */}
+                        <div style={{
+                          position: 'absolute',
+                          top: '-30px',
+                          [isMe ? 'right' : 'left']: '0',
+                          display: 'flex', alignItems: 'center', gap: '4px',
+                          zIndex: 10,
+                          pointerEvents: 'auto',
+                        }}>
                           <button
                             onClick={() => setReplyingTo({ id: msg.id, text: msg.text, senderId: msg.senderId, _selfId: currentUser?.id })}
-                            style={{ background: 'var(--surface)', border: '1px solid var(--border-light)', borderRadius: '8px', padding: '3px 7px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: 'var(--text-muted)' }}
-                            title="Reply"
+                            style={{ background: 'var(--surface)', border: '1px solid var(--border-light)', borderRadius: '8px', padding: '3px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '10px', fontWeight: 600, color: 'var(--text-muted)', boxShadow: '0 1px 4px rgba(0,0,0,0.1)', whiteSpace: 'nowrap' }}
                           >
                             <Reply style={{ width: '11px', height: '11px' }} /> Reply
                           </button>
-                          {/* Emoji trigger */}
                           <button
                             onClick={() => setEmojiPickerMsgId(emojiPickerMsgId === msg.id ? null : msg.id)}
-                            style={{ background: 'var(--surface)', border: '1px solid var(--border-light)', borderRadius: '8px', padding: '3px 7px', cursor: 'pointer', fontSize: '12px', color: 'var(--text-muted)' }}
-                            title="React"
+                            style={{ background: 'var(--surface)', border: '1px solid var(--border-light)', borderRadius: '8px', padding: '3px 8px', cursor: 'pointer', fontSize: '13px', boxShadow: '0 1px 4px rgba(0,0,0,0.1)' }}
                           >😊</button>
-                          {/* Delete (own msgs only) */}
                           {isMe && (
                             <button
                               onClick={() => setDeleteTarget({ id: msg.id, senderId: msg.senderId, receiverId: msg.receiverId })}
-                              style={{ background: 'var(--surface)', border: '1px solid var(--border-light)', borderRadius: '8px', padding: '3px 7px', cursor: 'pointer', display: 'flex', alignItems: 'center', fontSize: '10px', color: '#ef4444' }}
-                              title="Delete"
+                              style={{ background: 'var(--surface)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', padding: '3px 7px', cursor: 'pointer', display: 'flex', alignItems: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.1)', color: '#ef4444' }}
                             >
                               <Trash2 style={{ width: '11px', height: '11px' }} />
                             </button>
@@ -2717,24 +2736,46 @@ export default function ChatPage() {
                         </div>
                       )}
 
-                      {/* Emoji picker popup */}
+                      {/* Emoji picker — fixed overlay, no layout shift */}
                       {emojiPickerMsgId === msg.id && (
-                        <div style={{ display: 'flex', gap: '4px', marginBottom: '4px', justifyContent: isMe ? 'flex-end' : 'flex-start', background: 'var(--surface)', borderRadius: '20px', padding: '4px 8px', border: '1px solid var(--border-light)', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', width: 'fit-content', marginLeft: isMe ? 'auto' : 0 }}>
-                          {['❤️','😂','😮','😢','😡','👍','🔥','🎉'].map(emoji => (
-                            <button
-                              key={emoji}
-                              onClick={() => {
-                                sendReaction(msg.id, isMe ? msg.receiverId : msg.senderId, emoji);
-                                setEmojiPickerMsgId(null);
-                              }}
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', padding: '2px', borderRadius: '6px', transition: 'transform 0.1s' }}
-                              onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.3)'}
-                              onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                            >{emoji}</button>
-                          ))}
-                        </div>
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setEmojiPickerMsgId(null)} />
+                          <div style={{
+                            position: 'absolute',
+                            top: '-52px',
+                            [isMe ? 'right' : 'left']: '0',
+                            zIndex: 50,
+                            display: 'flex', gap: '2px',
+                            background: 'var(--surface)',
+                            borderRadius: '24px',
+                            padding: '6px 10px',
+                            border: '1px solid var(--border-light)',
+                            boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                            animation: 'slideUp 0.15s ease-out',
+                          }}>
+                            {['❤️','😂','😮','😢','😡','👍','🔥','🎉'].map(emoji => (
+                              <button
+                                key={emoji}
+                                onClick={() => {
+                                  sendReaction(msg.id, isMe ? msg.receiverId : msg.senderId, emoji);
+                                  setEmojiPickerMsgId(null);
+                                }}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', padding: '2px 3px', borderRadius: '8px', transition: 'transform 0.1s', lineHeight: 1 }}
+                                onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.35)'}
+                                onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                              >{emoji}</button>
+                            ))}
+                          </div>
+                        </>
                       )}
 
+                      {/* Swipe-to-reply indicator icon (appears on left during swipe) */}
+                      <div className="swipe-icon" style={{ position: 'absolute', [isMe ? 'left' : 'right']: isMe ? '-32px' : '-32px', top: '50%', transform: 'translateY(-50%) scale(0)', opacity: 0, transition: 'none', width: '24px', height: '24px', background: 'var(--primary)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+                      </div>
+
+                      {/* Column wrapper: bubble on top, reactions below */}
+                      <div className="swipe-bubble" style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '100%' }}>
                       {/* Bubble */}
                       <div
                         className={isMe ? 'bubble-out' : 'bubble-in'}
@@ -2831,14 +2872,14 @@ export default function ChatPage() {
                           </div>
                         )}
                       </div>
-                      {/* Reactions */}
+                      {/* Reactions — below bubble */}
                       {msg.reactions && Object.keys(msg.reactions).length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px', justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '3px', marginBottom: '2px' }}>
                           {Object.entries(msg.reactions).map(([emoji, users]) => users.length > 0 && (
                             <button
                               key={emoji}
                               onClick={() => sendReaction(msg.id, isMe ? msg.receiverId : msg.senderId, emoji)}
-                              style={{ background: users.includes(currentUser?.id) ? 'rgba(99,102,241,0.15)' : 'var(--surface)', border: users.includes(currentUser?.id) ? '1.5px solid rgba(99,102,241,0.4)' : '1px solid var(--border-light)', borderRadius: '20px', padding: '2px 7px', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '3px' }}
+                              style={{ background: users.includes(currentUser?.id) ? 'rgba(99,102,241,0.15)' : 'var(--surface)', border: users.includes(currentUser?.id) ? '1.5px solid rgba(99,102,241,0.4)' : '1px solid var(--border-light)', borderRadius: '20px', padding: '2px 8px', cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '3px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}
                             >
                               {emoji}
                               {users.length > 1 && <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)' }}>{users.length}</span>}
@@ -2846,12 +2887,93 @@ export default function ChatPage() {
                           ))}
                         </div>
                       )}
+                      </div>{/* end swipe-bubble column */}
                     </div>
                   );
                 })
               )}
               <div ref={messagesEndRef} />
             </div>
+
+            {/* Mobile Message Action Sheet */}
+            {msgActionSheet && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(2px)' }}
+                  onClick={() => setMsgActionSheet(null)}
+                />
+                <div style={{
+                  position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50,
+                  background: 'var(--surface)',
+                  borderRadius: '24px 24px 0 0',
+                  padding: '12px 0 32px',
+                  boxShadow: '0 -8px 32px rgba(0,0,0,0.2)',
+                  animation: 'slideUp 0.2s ease-out',
+                }}>
+                  {/* Drag handle */}
+                  <div style={{ width: '36px', height: '4px', background: 'var(--border)', borderRadius: '2px', margin: '0 auto 16px' }} />
+
+                  {/* Message preview */}
+                  <div style={{ padding: '0 20px 14px', borderBottom: '1px solid var(--border-light)' }}>
+                    <p style={{ fontSize: '12px', color: 'var(--text-subtle)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+                      {msgActionSheet.msg.text || '📎 Attachment'}
+                    </p>
+                  </div>
+
+                  {/* Emoji strip */}
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', padding: '14px 20px', borderBottom: '1px solid var(--border-light)' }}>
+                    {['❤️','😂','😮','😢','😡','👍','🔥','🎉'].map(emoji => {
+                      const msg = msgActionSheet.msg;
+                      const isMe = msgActionSheet.isMe;
+                      const reacted = msg.reactions?.[emoji]?.includes(currentUser?.id);
+                      return (
+                        <button
+                          key={emoji}
+                          onClick={() => {
+                            sendReaction(msg.id, isMe ? msg.receiverId : msg.senderId, emoji);
+                            setMsgActionSheet(null);
+                          }}
+                          style={{
+                            background: reacted ? 'rgba(99,102,241,0.15)' : 'var(--surface-2)',
+                            border: reacted ? '2px solid rgba(99,102,241,0.4)' : '1.5px solid var(--border-light)',
+                            borderRadius: '50%', width: '44px', height: '44px',
+                            cursor: 'pointer', fontSize: '22px', display: 'flex',
+                            alignItems: 'center', justifyContent: 'center',
+                          }}
+                        >{emoji}</button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ padding: '8px 0' }}>
+                    <button
+                      onClick={() => {
+                        setReplyingTo({ id: msgActionSheet.msg.id, text: msgActionSheet.msg.text, senderId: msgActionSheet.msg.senderId, _selfId: currentUser?.id });
+                        setMsgActionSheet(null);
+                      }}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 24px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text)', fontSize: '15px', fontFamily: 'var(--font-jakarta)', fontWeight: 500 }}
+                    >
+                      <Reply style={{ width: '18px', height: '18px', color: 'var(--primary)' }} />
+                      Reply
+                    </button>
+                    {msgActionSheet.isMe && (
+                      <button
+                        onClick={() => {
+                          setDeleteTarget({ id: msgActionSheet.msg.id, senderId: msgActionSheet.msg.senderId, receiverId: msgActionSheet.msg.receiverId });
+                          setMsgActionSheet(null);
+                        }}
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 24px', background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: '15px', fontFamily: 'var(--font-jakarta)', fontWeight: 500 }}
+                      >
+                        <Trash2 style={{ width: '18px', height: '18px' }} />
+                        Delete message
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Delete Message Confirmation Modal */}
             {deleteTarget && (
