@@ -4210,44 +4210,67 @@ export default function ChatPage() {
                                     alert("This is a self-destructing Snap sent by you. Only the recipient can view it.");
                                   }
                                 }}
-                                className="flex items-center gap-3 p-3.5 m-1 rounded-2xl cursor-pointer transition-all duration-300 select-none group border"
+                                className="flex items-center gap-3.5 p-3.5 m-1 rounded-2xl cursor-pointer transition-all duration-300 select-none group border"
                                 style={{
-                                  background: isMe ? 'rgba(30, 41, 59, 0.2)' : 'rgba(245, 87, 108, 0.06)',
-                                  borderColor: isMe ? 'rgba(255, 255, 255, 0.06)' : 'rgba(245, 87, 108, 0.35)',
-                                  backdropFilter: 'blur(8px)',
-                                  boxShadow: !isMe ? '0 4px 20px rgba(245, 87, 108, 0.08)' : 'none',
+                                  background: isMe 
+                                    ? 'rgba(124, 58, 237, 0.06)' 
+                                    : 'linear-gradient(135deg, rgba(124, 58, 237, 0.08) 0%, rgba(255, 64, 129, 0.08) 100%)',
+                                  borderColor: isMe 
+                                    ? 'rgba(124, 58, 237, 0.25)' 
+                                    : 'rgba(255, 64, 129, 0.35)',
+                                  backdropFilter: 'blur(10px)',
+                                  boxShadow: !isMe 
+                                    ? '0 6px 20px rgba(255, 64, 129, 0.08)' 
+                                    : '0 4px 15px rgba(124, 58, 237, 0.04)',
                                 }}
                                 onMouseEnter={e => {
-                                  e.currentTarget.style.transform = 'translateY(-1px) scale(1.01)';
-                                  e.currentTarget.style.borderColor = isMe ? 'rgba(255, 255, 255, 0.15)' : 'rgba(245, 87, 108, 0.6)';
-                                  e.currentTarget.style.boxShadow = isMe ? 'none' : '0 6px 24px rgba(245, 87, 108, 0.15)';
+                                  e.currentTarget.style.transform = 'translateY(-1.5px)';
+                                  e.currentTarget.style.borderColor = isMe 
+                                    ? 'rgba(124, 58, 237, 0.45)' 
+                                    : 'rgba(255, 64, 129, 0.6)';
                                 }}
                                 onMouseLeave={e => {
                                   e.currentTarget.style.transform = 'none';
-                                  e.currentTarget.style.borderColor = isMe ? 'rgba(255, 255, 255, 0.06)' : 'rgba(245, 87, 108, 0.35)';
-                                  e.currentTarget.style.boxShadow = isMe ? 'none' : '0 4px 20px rgba(245, 87, 108, 0.08)';
+                                  e.currentTarget.style.borderColor = isMe 
+                                    ? 'rgba(124, 58, 237, 0.25)' 
+                                    : 'rgba(255, 64, 129, 0.35)';
                                 }}
                               >
                                 <div 
-                                  className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300"
+                                  className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 shadow-md shrink-0"
                                   style={{
-                                    background: isMe ? 'rgba(255, 255, 255, 0.06)' : 'rgba(245, 87, 108, 0.15)',
-                                    color: isMe ? '#94a3b8' : '#f5576c',
-                                    boxShadow: !isMe ? '0 0 10px rgba(245, 87, 108, 0.15)' : 'none'
+                                    background: isMe 
+                                      ? 'var(--surface-2)' 
+                                      : 'linear-gradient(135deg, #7c3aed 0%, #FF4081 100%)',
+                                    color: isMe ? '#7c3aed' : '#ffffff',
                                   }}
                                 >
                                   <Camera className={`w-5 h-5 ${!isMe ? 'animate-pulse' : ''}`} />
                                 </div>
+                                
                                 <div className="flex-1 min-w-0">
-                                  <div className="font-extrabold text-xs uppercase tracking-wider text-slate-200" style={{ fontSize: '10px', letterSpacing: '0.05em' }}>
-                                    {isMe ? 'Sent Snap' : 'Received Snap'}
+                                  <div 
+                                    className="font-extrabold text-[11px] uppercase tracking-wider" 
+                                    style={{ 
+                                      color: isMe ? 'var(--text)' : '#FF4081',
+                                      letterSpacing: '0.05em' 
+                                    }}
+                                  >
+                                    {isMe ? 'Sent Snap' : 'New Snap'}
                                   </div>
-                                  <div className="text-xs text-slate-400 mt-0.5 truncate" style={{ fontSize: '11px' }}>
-                                    {isMe ? 'Waiting for view' : 'Tap to view (10s limit)'}
+                                  <div 
+                                    className="text-[11px] mt-0.5 truncate font-medium" 
+                                    style={{ color: 'var(--text-muted)' }}
+                                  >
+                                    {isMe ? 'Waiting for view' : 'Tap to open • 10s limit'}
                                   </div>
                                 </div>
+
                                 {!isMe && (
-                                  <div className="w-2 h-2 rounded-full bg-pink-500 animate-ping shrink-0 shadow-[0_0_8px_rgba(236,72,153,0.8)]" />
+                                  <div className="relative flex items-center justify-center w-2.5 h-2.5 shrink-0">
+                                    <div className="absolute w-full h-full rounded-full bg-[#FF4081] opacity-75 animate-ping" />
+                                    <div className="relative w-2 h-2 rounded-full bg-[#FF4081] shadow-[0_0_8px_rgba(255,64,129,0.8)]" />
+                                  </div>
                                 )}
                               </div>
                             )}
