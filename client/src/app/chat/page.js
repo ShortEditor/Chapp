@@ -864,6 +864,40 @@ export default function ChatPage() {
     setActiveChat(activeFriend?.id || null);
   }, [activeFriend, setActiveChat]);
 
+  // Cleanup expired snaps (older than 24 hours) from IndexedDB and the database
+  useEffect(() => {
+    const checkExpiredSnaps = async () => {
+      try {
+        const now = Date.now();
+        const cutoff = now - 24 * 60 * 60 * 1000; // 24 hours ago
+        
+        // Find all snaps older than 24 hours in our local IndexedDB
+        const expiredSnaps = await db.messages
+          .where('mediaType')
+          .equals('snap')
+          .filter(m => m.timestamp < cutoff)
+          .toArray();
+          
+        if (expiredSnaps.length > 0) {
+          console.log(`⏱️ [Snaps] Found ${expiredSnaps.length} expired snaps to clean up...`);
+          for (const snap of expiredSnaps) {
+            const recipientId = snap.senderId === currentUser?.id ? snap.receiverId : snap.senderId;
+            await deleteMessage(snap.id, recipientId);
+          }
+        }
+      } catch (err) {
+        console.error('Error cleaning up expired snaps:', err);
+      }
+    };
+    
+    if (currentUser?.id) {
+      checkExpiredSnaps();
+      // Periodically check every 5 minutes
+      const interval = setInterval(checkExpiredSnaps, 5 * 60 * 1000);
+      return () => clearInterval(interval);
+    }
+  }, [currentUser, deleteMessage]);
+
   // Fetch backup info when settings page is displayed
   useEffect(() => {
     if (showSettings) {
