@@ -2712,8 +2712,9 @@ export default function ChatPage() {
                       {hoveredMsgId === msg.id && (
                         <div style={{
                           position: 'absolute',
-                          top: '-30px',
-                          [isMe ? 'right' : 'left']: '0',
+                          left: '0',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
                           display: 'flex', alignItems: 'center', gap: '4px',
                           zIndex: 10,
                           pointerEvents: 'auto',
@@ -2746,7 +2747,7 @@ export default function ChatPage() {
                           <div style={{
                             position: 'absolute',
                             top: '-52px',
-                            [isMe ? 'right' : 'left']: '0',
+                            left: '0',
                             zIndex: 50,
                             display: 'flex', gap: '2px',
                             background: 'var(--surface)',
