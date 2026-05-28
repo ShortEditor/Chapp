@@ -49,6 +49,8 @@ model Friendship {
   receiver User @relation("ReceivedFriendships", fields: [receiverId], references: [id], onDelete: Cascade)
 
   @@unique([senderId, receiverId])
+  @@index([receiverId])
+  @@index([status])
 }
 
 model Group {
@@ -74,6 +76,7 @@ model GroupMember {
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([groupId, userId])
+  @@index([userId])
 }
 
 model Story {
@@ -89,6 +92,9 @@ model Story {
 
   user       User     @relation("UserStories", fields: [userId], references: [id], onDelete: Cascade)
   views      StoryView[]
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model StoryView {
@@ -101,5 +107,7 @@ model StoryView {
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([storyId, userId])
+  @@index([storyId])
+  @@index([userId])
 }
 
