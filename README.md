@@ -1,153 +1,250 @@
-# Chapp — Privacy-First Realtime Messaging Monorepo
+# Chapp — Privacy-First Realtime Messaging
 
-Chapp is a sleek, modern, and privacy-focused messaging application designed around a **zero-server message storage philosophy**. Users completely own their conversation logs, saved in local-first database models directly inside their browser's IndexedDB.
+Chapp is a sleek, modern, privacy-focused messaging app built around a **zero-server message storage philosophy**. All conversations are stored locally in the browser's IndexedDB — the server never sees your plaintext messages.
 
 ---
 
-## 📐 System Architecture Diagram
+## System Architecture
 
-Below is the diagrammatic representation of Chapp's system architecture showing the components, interfaces, and overall runtime data-flow pipelines:
-
-![Chapp System Architecture Diagram](file:///C:/Users/Admin/.gemini/antigravity/brain/4433129b-6e23-4278-9ee6-601212a12483/chapp_architecture_diagram_1779862489170.png)
-
-### Architectural Flowchart
 ```mermaid
 flowchart TD
-    subgraph Client [Client App - Next.js 16 Web App]
+    subgraph Client [Client App - Next.js 16]
         A[(IndexedDB / Dexie.js)]
         B[Web Crypto API]
         C[PWA Service Worker]
         D[Socket.io Client]
-        M[Next.js 16 UI Pages]
+        M[Next.js 16 UI]
     end
 
-    subgraph Relaying [Transit & Realtime Layer]
+    subgraph Relay [Realtime Layer]
         E{Socket.io Server}
     end
 
-    subgraph Server [Backend Cloud - Node.js & Express]
-        F[(Upstash Redis Cache)]
+    subgraph Server [Backend - Node.js / Express]
+        F[(Upstash Redis)]
         G[(Supabase PostgreSQL)]
-        H[Hourly Media Purge Worker]
+        H[Hourly Media Purge]
     end
 
-    M -- REST API: Signup / Login --> Server
-    M -- REST API: Forgot Password (OTP) --> Server
+    M -- REST: Auth / Profile --> Server
     D -- WebSocket: Send Message --> E
-    E -- Message Relayed (Online) --> D
-    E -- Buffers Message (Offline, 7-Day TTL) --> F
-    F -- Pull & Deliver on Login --> D
-    
-    A -- Local Database Export --> B
-    B -- PBKDF2 + AES-GCM Encryption --> B
-    B -- Sync Encrypted Backup Payload --> G
+    E -- Relay Online --> D
+    E -- Buffer Offline (7d TTL) --> F
+    F -- Deliver on Login --> D
+    A -- Export --> B
+    B -- PBKDF2 + AES-GCM --> G
     G -- Fetch Backup --> B
-    B -- Local Passphrase Decryption --> B
-    B -- Merge Restored Data --> A
+    B -- Decrypt + Merge --> A
 ```
 
 ---
 
-## 🛠️ Complete Technology Stack
+## Tech Stack
 
-### 1. Frontend & Client-side
-* **Framework**: [Next.js 16 (App Router)](https://nextjs.org/) for highly performant server-side rendering, routing, and UI logic.
-* **Local Database**: [Dexie.js](https://dexie.org/) (wrapper around native browser **IndexedDB**) for offline-first, local-only conversation storage.
-* **Cryptography**: Native browser [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API) (`SubtleCrypto`) for local zero-knowledge encryption of chat data.
-* **Realtime Communication**: [Socket.io-client](https://socket.io/) configured to connect directly using WebSocket transport first (with fallback to polling).
-* **Styling & Theme**: Vanilla CSS + [Tailwind CSS v4](https://tailwindcss.com/) for fluid glassmorphic layouts, dark mode accents, custom buttons, and smooth animations.
-* **Icons**: [Lucide React](https://lucide.dev/) for crisp, scalable vectors.
-* **Notifications & PWA**: Service Workers with progressive web app manifestation for installability, offline assets caching, and native standalone window layouts.
+### Frontend
+| Layer | Technology |
+|---|---|
+| Framework | Next.js 16 (App Router) |
+| Local DB | Dexie.js (IndexedDB) |
+| Crypto | Web Crypto API (SubtleCrypto) |
+| Realtime | Socket.io-client |
+| Styling | Vanilla CSS + Tailwind CSS v4 |
+| Icons | Lucide React |
+| PWA | Service Workers + Web App Manifest |
 
-### 2. Backend & Server-side
-* **Runtime**: [Node.js](https://nodejs.org/) & [Express.js](https://expressjs.com/) REST APIs.
-* **Database ORM**: [Prisma](https://www.prisma.io/) to generate types and perform operations against the PostgreSQL database.
-* **Realtime Communication**: [Socket.io](https://socket.io/) server integrated directly with Express HTTP servers to handle low-latency socket multiplexing.
-* **Email Service**: [Nodemailer](https://nodemailer.com/) with an SMTP transporter for sending password reset verification codes (OTP).
+### Backend
+| Layer | Technology |
+|---|---|
+| Runtime | Node.js + Express |
+| Realtime | Socket.io |
+| Database | Supabase (PostgreSQL via Prisma) |
+| Cache / Queue | Upstash Redis (offline message buffer) |
+| Media | Cloudinary (auto-purged after 1h) |
+| Auth | JWT (jsonwebtoken) + bcrypt |
+| Push Notifications | Web Push (VAPID) |
 
-### 3. Third-party Cloud Infrastructure
-* **PostgreSQL Database**: [Supabase](https://supabase.com/) hosting the primary database.
-* **Cache & Memory Queues**: [Upstash Redis](https://upstash.com/) for offline message buffers and 6-digit OTP code storage.
-* **Media Uploads**: [Cloudinary](https://cloudinary.com/) for ephemeral image/video storage (cleaned up hourly by background cron scripts).
-
----
-
-## 🔄 Core Working Flows & Pipelines
-
-### 1. Zero-Server Storage Messaging Flow
-1. **Send Message**: A user sends a message. The client generates a local message record in IndexedDB and broadcasts a `send-message` event via Socket.io.
-2. **Server Relay**:
-   * **If Recipient is Online**: The server immediately forwards the message to the recipient's active socket connection. Once the client confirms receipt (`ack` event), the message is instantly cleared from the server's memory.
-   * **If Recipient is Offline**: The server writes the message block into a temporary queue inside **Upstash Redis** with an expiration **TTL of 7 Days**.
-3. **Queue Draining**: As soon as the recipient logs back in, the client connects to Socket.io, causing the server to fetch, pop, and deliver all queued messages from Redis. Once received, the messages are deleted from Redis.
-
-### 2. Zero-Knowledge Backup Sync Flow
-1. **Export**: The client extracts all local conversation logs, message tables, and friend relationships from IndexedDB into a JSON blob.
-2. **Derive Keys**: The browser prompts the user for a secret passphrase. The Web Crypto API derives a 256-bit AES key using `PBKDF2` (100,000 SHA-256 iterations and a random 16-byte salt).
-3. **Encrypt**: The client encrypts the JSON blob locally using `AES-GCM` (utilizing a unique 12-byte initialization vector `IV`).
-4. **Upload**: The final payload (`saltHex:ivHex:ciphertextBase64`) is transmitted via a secure PUT request to `/api/backup`. The server saves the string into PostgreSQL. **The server never receives the passphrase or the AES key, making the backup 100% private.**
-
-### 3. Recovery Email & Forgot Password OTP Flow
-1. **Signup Email Capture**: Users supply a recovery email during registration. This email is validated and stored securely in Supabase under a unique constraint.
-2. **OTP Generation**: If a user forgets their password, they input their recovery email. The server verifies the account, generates a secure 6-digit random code, and caches it in Redis using the key structure `otp:email` with a **10-minute expiration TTL**.
-3. **OTP Dispatch**: The server fires an email containing the OTP via Nodemailer. *(Falls back to standard console logging in local development environments).*
-4. **Password Reset**: The user inputs the 6-digit OTP and their new password. The server checks the value against Redis. If verified, it hashes the new password with `bcryptjs`, updates the database record, and deletes the OTP code from Redis.
+### Infrastructure
+| Service | Provider | Tier |
+|---|---|---|
+| Frontend | Vercel | Free |
+| Backend | Render | Free |
+| Database | Supabase | Free |
+| Media CDN | Cloudinary | Free |
+| Cache | Upstash Redis | Free |
 
 ---
 
-## ⚙️ Monorepo Configurations
+## Features
 
-Create and fill the `.env` files in both directories:
+### 💬 Messaging
+- **End-to-End Encrypted (E2EE)** — ECDH key exchange + AES-GCM per conversation
+- **Local-first storage** — messages live in IndexedDB, never persisted on server
+- **Offline message queue** — messages buffered in Redis, delivered on reconnect (7-day TTL)
+- **Read receipts** — single tick (sent) → single tick (delivered) → double tick (read)
+- **Media sharing** — images, videos, files via Cloudinary (auto-purged after 1 hour)
+- **WhatsApp-style reply** — swipe right on any message to reply with quoted preview
+- **Emoji reactions** — 8 emoji reactions per message, real-time sync to other user
+- **Typing indicators** — live typing status
+- **Message unsend** — delete for both sides in real-time
 
-### A. Backend Configuration: `/server/.env`
-Create a `.env` file inside the `server/` directory:
-```env
-PORT=5000
-DATABASE_URL="postgresql://postgres:[YOUR-PASSWORD]@db.xxxxxx.supabase.co:5432/postgres?pgbouncer=true"
-JWT_SECRET="generate_a_random_secure_secret_string"
-REDIS_URL="YOUR_UPSTASH_REDIS_CONNECTION_STRING_HERE"
-FIREBASE_PROJECT_ID="YOUR_FIREBASE_PROJECT_ID_HERE"
+### 👤 Profiles
+- **Avatar upload** — via Cloudinary
+- **Banner image** — click banner to upload/replace
+- **Bio** — short personal description
+- **Social links** — Instagram, Facebook, YouTube, X/Twitter, LinkedIn, GitHub, TikTok, Snapchat, WhatsApp, Phone (all optional, show as tappable icons)
+- **User profile modal** — click any avatar/username to view their profile with Message + Add Friend actions
+
+### 👥 Friends & Social
+- **Friend requests** — send, accept, decline
+- **Discover users** — search by username
+- **Online presence** — real-time online/offline status
+- **Friends tab** — live search, quick message/add actions
+
+### 🔒 Privacy & Security
+- **Zero knowledge backup** — chats encrypted client-side (PBKDF2 + AES-GCM + deflate compression) before upload; server stores only ciphertext
+- **No plaintext on server** — ever
+- **Password-protected restore** — passphrase never leaves the device
+
+### 📱 Mobile
+- **PWA installable** — "Add to Home Screen" for app-like experience
+- **Swipe to reply** — swipe right on message triggers reply with spring-back animation
+- **Long-press action sheet** — bottom sheet with emoji reactions, reply, and delete
+- **Push notifications** — Web Push for offline messages
+
+### 📞 Voice Calls
+- **P2P WebRTC voice calls** — direct peer-to-peer, no server relay
+- **Mute / Speaker toggle**
+- **Call duration timer**
+
+---
+
+## Project Structure
+
+```
+chapp/
+├── client/                  # Next.js 16 frontend (Vercel)
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── chat/        # Main chat page (~4000 lines, core UI)
+│   │   │   ├── login/
+│   │   │   ├── signup/
+│   │   │   └── forgot-password/
+│   │   ├── context/
+│   │   │   └── SocketContext.js   # Socket, E2EE, IndexedDB logic
+│   │   └── lib/
+│   │       └── crypto.js          # PBKDF2/AES-GCM backup encryption
+│   └── public/
+│       └── sw.js            # Service Worker (PWA + push)
+│
+└── server/                  # Express + Socket.io backend (Render)
+    ├── src/
+    │   └── server.js        # All REST + Socket.io handlers (~1400 lines)
+    └── prisma/
+        └── schema.prisma    # PostgreSQL schema
 ```
 
-### B. Frontend Configuration: `/client/.env`
-Create a `.env` file inside the `client/` directory:
-```env
-NEXT_PUBLIC_BACKEND_URL="https://chapp-oxa7.onrender.com"
+---
 
-# Firebase Client SDK Configuration (Optional - Falls back to Demo Mode if empty)
-NEXT_PUBLIC_FIREBASE_API_KEY="your-api-key"
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN="your-auth-domain"
-NEXT_PUBLIC_FIREBASE_PROJECT_ID="your-project-id"
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET="your-storage-bucket"
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID="your-sender-id"
-NEXT_PUBLIC_FIREBASE_APP_ID="your-app-id"
+## Database Schema (Prisma)
+
+```prisma
+model User {
+  id               String   @id @default(uuid())
+  username         String   @unique
+  email            String   @unique
+  passwordHash     String
+  avatarUrl        String?
+  bannerUrl        String?
+  bio              String?
+  socialLinks      Json?    // { instagram, facebook, youtube, twitter, ... }
+  publicKey        String?  // ECDH public key for E2EE
+  encryptedPrivKey String?  // Private key encrypted with user password
+  pushSubscription String?  // Web Push subscription object
+  backupData       String?  // Encrypted backup ciphertext
+  createdAt        DateTime @default(now())
+  friendships      Friendship[]
+}
+
+model Friendship {
+  id         String   @id @default(uuid())
+  userId     String
+  friendId   String
+  status     String   // "pending" | "accepted"
+  createdAt  DateTime @default(now())
+  user       User     @relation(...)
+}
 ```
 
 ---
 
-## 🚀 Running the Application Locally
+## Local Setup
 
-### 1. Start the Express Backend
-Open a terminal in the `/server` folder:
+### Prerequisites
+- Node.js 18+
+- A Supabase project (PostgreSQL)
+- An Upstash Redis database
+- A Cloudinary account
+- A Render account (or any Node host)
+
+### Server
+
 ```bash
-# Install dependencies
+cd server
 npm install
 
-# Push database schema to Supabase & generate client
-npx prisma db push
+# Create .env
+DATABASE_URL=postgresql://...
+REDIS_URL=rediss://...
+JWT_SECRET=your_secret
+CLOUDINARY_CLOUD_NAME=...
+CLOUDINARY_API_KEY=...
+CLOUDINARY_API_SECRET=...
+VAPID_PUBLIC_KEY=...
+VAPID_PRIVATE_KEY=...
 
-# Start server in development mode
+npx prisma migrate deploy
+npm start
+```
+
+### Client
+
+```bash
+cd client
+npm install
+
+# Create .env.local
+NEXT_PUBLIC_BACKEND_URL=https://your-render-service.onrender.com
+
 npm run dev
 ```
 
-### 2. Start the Next.js Frontend
-Open a separate terminal in the `/client` folder:
-```bash
-# Install dependencies
-npm install
+---
 
-# Start development server
-npm run dev
-```
+## Backup System
 
-Open [http://localhost:3000](http://localhost:3000) in your browser and start chatting securely!
+Chapp's backup is fully zero-knowledge:
+
+1. **Export** — all IndexedDB messages serialized to JSON
+2. **Compress** — deflate-raw via browser-native `CompressionStream` (~70% size reduction)
+3. **Encrypt** — PBKDF2 key derivation (100,000 iterations, SHA-256) + AES-GCM 256-bit encryption
+4. **Upload** — encrypted ciphertext stored in Supabase under the user's row
+5. **Restore** — download ciphertext → decrypt with passphrase → decompress → merge into IndexedDB
+
+The server stores only the ciphertext string. Without the passphrase, it is computationally infeasible to recover the data.
+
+---
+
+## Capacity (Free Tier)
+
+| Service | Limit | At 500 users |
+|---|---|---|
+| Supabase DB | 500 MB | ~75 MB ✅ |
+| Render RAM | 512 MB | ~50-100 concurrent ✅ |
+| Cloudinary | 1 GB storage | ~250-500 MB ✅ |
+| Vercel | 100 GB/month | Not a concern ✅ |
+
+---
+
+## License
+
+MIT
