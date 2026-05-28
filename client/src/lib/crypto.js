@@ -1,7 +1,49 @@
 /**
  * Zero-Knowledge client-side encryption using native Web Crypto API.
  * Password-based key derivation (PBKDF2) + AES-GCM symmetric encryption.
+ * Payloads are compressed with native CompressionStream before encryption
+ * to dramatically reduce backup size (~60-80% smaller).
  */
+
+// ── Compression helpers (native browser API, no dependencies) ────────────────
+async function compress(str) {
+  const stream = new CompressionStream('deflate-raw');
+  const writer = stream.writable.getWriter();
+  const encoder = new TextEncoder();
+  writer.write(encoder.encode(str));
+  writer.close();
+  const chunks = [];
+  const reader = stream.readable.getReader();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  const total = chunks.reduce((n, c) => n + c.length, 0);
+  const result = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) { result.set(chunk, offset); offset += chunk.length; }
+  return result.buffer;
+}
+
+async function decompress(buffer) {
+  const stream = new DecompressionStream('deflate-raw');
+  const writer = stream.writable.getWriter();
+  writer.write(new Uint8Array(buffer));
+  writer.close();
+  const chunks = [];
+  const reader = stream.readable.getReader();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  const total = chunks.reduce((n, c) => n + c.length, 0);
+  const result = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) { result.set(chunk, offset); offset += chunk.length; }
+  return new TextDecoder().decode(result);
+}
 
 // Helper to convert Uint8Array to hex string
 function bufToHex(buffer) {
@@ -73,22 +115,20 @@ export async function encryptData(dataJson, password) {
   // 4. Generate random 12-byte IV for AES-GCM
   const iv = window.crypto.getRandomValues(new Uint8Array(12));
 
-  // 5. Encrypt plaintext JSON payload
+  // 5. Compress then encrypt the JSON payload
+  const compressedBuffer = await compress(dataJson);
   const ciphertextBuffer = await window.crypto.subtle.encrypt(
-    {
-      name: 'AES-GCM',
-      iv: iv
-    },
+    { name: 'AES-GCM', iv: iv },
     aesKey,
-    encoder.encode(dataJson)
+    compressedBuffer
   );
 
-  // 6. Format output: salt_hex:iv_hex:ciphertext_base64
+  // 6. Format: 'c:saltHex:ivHex:ciphertextBase64'  ('c:' = compressed)
   const saltHex = bufToHex(salt);
   const ivHex = bufToHex(iv);
   const ciphertextBase64 = bufToBase64(ciphertextBuffer);
 
-  return `${saltHex}:${ivHex}:${ciphertextBase64}`;
+  return `c:${saltHex}:${ivHex}:${ciphertextBase64}`;
 }
 
 /**
@@ -98,7 +138,10 @@ export async function encryptData(dataJson, password) {
  * @returns {Promise<string>} Decrypted plaintext JSON string
  */
 export async function decryptData(backupString, password) {
-  const parts = backupString.split(':');
+  // Support both compressed ('c:' prefix) and legacy uncompressed formats
+  const isCompressed = backupString.startsWith('c:');
+  const raw = isCompressed ? backupString.slice(2) : backupString;
+  const parts = raw.split(':');
   if (parts.length !== 3) {
     throw new Error('Invalid backup file structure.');
   }
@@ -136,15 +179,15 @@ export async function decryptData(backupString, password) {
 
   // 3. Decrypt ciphertext payload
   const decryptedBuffer = await window.crypto.subtle.decrypt(
-    {
-      name: 'AES-GCM',
-      iv: iv
-    },
+    { name: 'AES-GCM', iv: iv },
     aesKey,
     ciphertext
   );
 
-  // 4. Decode array buffer back to JSON string
+  // 4. Decompress if needed, then decode to JSON string
+  if (isCompressed) {
+    return await decompress(decryptedBuffer);
+  }
   const decoder = new TextDecoder();
   return decoder.decode(decryptedBuffer);
 }
