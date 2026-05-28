@@ -286,25 +286,12 @@ const MessageInputBar = React.memo(({ onSendMessage, pendingMedia, uploading, fi
     if (!isGifPickerOpen) return;
 
     const fetchGifs = async () => {
-      const apiKey = process.env.NEXT_PUBLIC_GIPHY_API_KEY;
-      if (!apiKey) {
-        // Fallback filtering of mock GIFs locally if query is provided
-        if (!gifQuery.trim()) {
-          setGifs(MOCK_GIFS);
-        } else {
-          // simple client search filter
-          const q = gifQuery.toLowerCase();
-          const matches = MOCK_GIFS.filter(g => g.url.toLowerCase().includes(q) || q.length > 1);
-          setGifs(matches.length > 0 ? matches : MOCK_GIFS.slice(0, 4));
-        }
-        return;
-      }
-
+      const apiKey = process.env.NEXT_PUBLIC_GIPHY_API_KEY || 'dc6zaTOxFJmzC';
       setLoadingGifs(true);
       try {
         const url = gifQuery.trim()
-          ? `https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(gifQuery)}&limit=24&rating=pg-13`
-          : `https://api.giphy.com/v1/gifs/trending?api_key=${apiKey}&limit=24&rating=pg-13`;
+          ? `https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(gifQuery)}&limit=50&rating=pg-13`
+          : `https://api.giphy.com/v1/gifs/trending?api_key=${apiKey}&limit=50&rating=pg-13`;
         const res = await fetch(url);
         if (res.ok) {
           const data = await res.json();
@@ -5785,7 +5772,13 @@ export default function ChatPage() {
 
                       <div className="relative">
                         <button
-                          onClick={() => setShowAudioMenu(!showAudioMenu)}
+                          onClick={async () => {
+                            if (audioOutputs.length <= 1) {
+                              await toggleSpeakerMode();
+                            } else {
+                              setShowAudioMenu(!showAudioMenu);
+                            }
+                          }}
                           className="w-12 h-12 rounded-full transition-all flex items-center justify-center cursor-pointer shadow-md"
                           style={{
                             background: showAudioMenu || speakerMode ? 'var(--primary)' : 'rgba(255,255,255,0.08)',
@@ -5797,7 +5790,7 @@ export default function ChatPage() {
                           <Volume2 className="w-5 h-5" />
                         </button>
                         
-                        {showAudioMenu && (
+                        {showAudioMenu && audioOutputs.length > 1 && (
                           <>
                             {/* Tap-to-close backdrop */}
                             <div
