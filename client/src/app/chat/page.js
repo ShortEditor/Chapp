@@ -117,11 +117,55 @@ const renderUsername = (username, textStyle = {}) => {
   }
   return <span style={textStyle}>{username || ''}</span>;
 };
+const MOCK_GIFS = [
+  {
+    preview: "https://media.giphy.com/media/t3Mzdx0O5p28M/giphy-downsized.gif",
+    url: "https://media.giphy.com/media/t3Mzdx0O5p28M/giphy.gif"
+  },
+  {
+    preview: "https://media.giphy.com/media/26n6Gx9moCgs1pUuk/giphy-downsized.gif",
+    url: "https://media.giphy.com/media/26n6Gx9moCgs1pUuk/giphy.gif"
+  },
+  {
+    preview: "https://media.giphy.com/media/XreQmk7ETCak0/giphy-downsized.gif",
+    url: "https://media.giphy.com/media/XreQmk7ETCak0/giphy.gif"
+  },
+  {
+    preview: "https://media.giphy.com/media/13CoXDiaCcC2EA/giphy-downsized.gif",
+    url: "https://media.giphy.com/media/13CoXDiaCcC2EA/giphy.gif"
+  },
+  {
+    preview: "https://media.giphy.com/media/111ebonMs90YLu/giphy-downsized.gif",
+    url: "https://media.giphy.com/media/111ebonMs90YLu/giphy.gif"
+  },
+  {
+    preview: "https://media.giphy.com/media/PUBxeOjaMNaQOxA7tA/giphy-downsized.gif",
+    url: "https://media.giphy.com/media/PUBxeOjaMNaQOxA7tA/giphy.gif"
+  },
+  {
+    preview: "https://media.giphy.com/media/d2lcHJTG5Tscg/giphy-downsized.gif",
+    url: "https://media.giphy.com/media/d2lcHJTG5Tscg/giphy.gif"
+  },
+  {
+    preview: "https://media.giphy.com/media/Um3ljJl8jfqOk/giphy-downsized.gif",
+    url: "https://media.giphy.com/media/Um3ljJl8jfqOk/giphy.gif"
+  },
+  {
+    preview: "https://media.giphy.com/media/26n79zLFVTuzRlEKY/giphy-downsized.gif",
+    url: "https://media.giphy.com/media/26n79zLFVTuzRlEKY/giphy.gif"
+  }
+];
 
-const MessageInputBar = React.memo(({ onSendMessage, pendingMedia, uploading, fileInputRef, triggerFileSelector, handleFileUpload, emitTyping, activeFriendId, replyingTo, onCancelReply }) => {
+const MessageInputBar = React.memo(({ onSendMessage, pendingMedia, uploading, fileInputRef, triggerFileSelector, handleFileUpload, emitTyping, activeFriendId, replyingTo, onCancelReply, onSendGif }) => {
   const [inputText, setInputText] = useState('');
   const typingTimeoutRef = useRef(null);
   const inputRef = useRef(null);
+
+  // GIF Picker states
+  const [isGifPickerOpen, setIsGifPickerOpen] = useState(false);
+  const [gifs, setGifs] = useState(MOCK_GIFS);
+  const [gifQuery, setGifQuery] = useState('');
+  const [loadingGifs, setLoadingGifs] = useState(false);
 
   // Auto-focus input and scroll into view when replying
   useEffect(() => {
@@ -137,6 +181,55 @@ const MessageInputBar = React.memo(({ onSendMessage, pendingMedia, uploading, fi
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
   }, [replyingTo, onCancelReply]);
+
+  // Fetch GIFs effect (debounced)
+  useEffect(() => {
+    if (!isGifPickerOpen) return;
+
+    const fetchGifs = async () => {
+      const apiKey = process.env.NEXT_PUBLIC_GIPHY_API_KEY;
+      if (!apiKey) {
+        // Fallback filtering of mock GIFs locally if query is provided
+        if (!gifQuery.trim()) {
+          setGifs(MOCK_GIFS);
+        } else {
+          // simple client search filter
+          const q = gifQuery.toLowerCase();
+          const matches = MOCK_GIFS.filter(g => g.url.toLowerCase().includes(q) || q.length > 1);
+          setGifs(matches.length > 0 ? matches : MOCK_GIFS.slice(0, 4));
+        }
+        return;
+      }
+
+      setLoadingGifs(true);
+      try {
+        const url = gifQuery.trim()
+          ? `https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(gifQuery)}&limit=24&rating=pg-13`
+          : `https://api.giphy.com/v1/gifs/trending?api_key=${apiKey}&limit=24&rating=pg-13`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          const mapped = (data.data || []).map(g => ({
+            preview: g.images?.fixed_width_downsampled?.url || g.images?.fixed_width?.url || g.images?.original?.url,
+            url: g.images?.original?.url
+          }));
+          setGifs(mapped.length > 0 ? mapped : MOCK_GIFS);
+        } else {
+          setGifs(MOCK_GIFS);
+        }
+      } catch (err) {
+        console.error("Giphy fetch error:", err);
+        setGifs(MOCK_GIFS);
+      } finally {
+        setLoadingGifs(false);
+      }
+    };
+
+    const delayDebounce = setTimeout(() => {
+      fetchGifs();
+    }, 400); // 400ms debounce
+    return () => clearTimeout(delayDebounce);
+  }, [gifQuery, isGifPickerOpen]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -155,6 +248,96 @@ const MessageInputBar = React.memo(({ onSendMessage, pendingMedia, uploading, fi
 
   return (
     <div className="w-full">
+      {/* GIF Picker Panel */}
+      {isGifPickerOpen && (
+        <div style={{
+          background: 'var(--surface)',
+          border: '1px solid var(--border-light)',
+          borderRadius: '16px',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+          marginBottom: '12px',
+          padding: '12px',
+          animation: 'slideUp 0.18s ease-out',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px',
+          maxHeight: '260px'
+        }}>
+          {/* Search Header */}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input
+              type="text"
+              placeholder="Search GIFs..."
+              value={gifQuery}
+              onChange={e => setGifQuery(e.target.value)}
+              className="msg-field flex-1"
+              style={{ height: '36px', fontSize: '13px', borderRadius: '10px', padding: '0 12px' }}
+            />
+            {gifQuery && (
+              <button
+                type="button"
+                onClick={() => setGifQuery('')}
+                style={{ background: 'var(--border-light)', border: 'none', borderRadius: '8px', padding: '0 12px', color: 'var(--text-muted)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+
+          {/* Grid Scroll Area */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: '8px',
+            overflowY: 'auto',
+            flex: 1,
+            paddingRight: '2px'
+          }}>
+            {loadingGifs ? (
+              <div style={{ gridColumn: 'span 3', textAlign: 'center', padding: '24px 0', fontSize: '12px', color: 'var(--text-muted)' }}>
+                Loading GIFs...
+              </div>
+            ) : gifs.length === 0 ? (
+              <div style={{ gridColumn: 'span 3', textAlign: 'center', padding: '24px 0', fontSize: '12px', color: 'var(--text-muted)' }}>
+                No GIFs found.
+              </div>
+            ) : (
+              gifs.map((gif, i) => (
+                <div
+                  key={i}
+                  onClick={() => {
+                    onSendGif(gif.url);
+                    setIsGifPickerOpen(false);
+                    setGifQuery('');
+                  }}
+                  style={{
+                    position: 'relative',
+                    aspectRatio: '16/10',
+                    borderRadius: '8px',
+                    overflow: 'hidden',
+                    cursor: 'pointer',
+                    background: 'var(--border-light)',
+                    transition: 'transform 0.12s ease'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.04)'}
+                  onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                  <img
+                    src={gif.preview}
+                    alt="gif"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    loading="lazy"
+                  />
+                </div>
+              ))
+            )}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '9px', color: 'var(--text-muted)', opacity: 0.6 }}>
+            Powered by GIPHY
+          </div>
+        </div>
+      )}
+
       {/* Reply bar — animates in */}
       {replyingTo && (
         <div style={{
@@ -189,17 +372,36 @@ const MessageInputBar = React.memo(({ onSendMessage, pendingMedia, uploading, fi
       <form onSubmit={handleSubmit} className="flex items-center gap-4">
         <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*,video/*,application/*" />
 
-        <button
-          type="button"
-          onClick={triggerFileSelector}
-          disabled={uploading}
-          className="p-3.5 rounded-full transition-colors shrink-0"
-          style={{ color: 'var(--text-muted)' }}
-          onMouseEnter={e => e.currentTarget.style.background = 'var(--border-light)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-        >
-          <Paperclip className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={triggerFileSelector}
+            disabled={uploading}
+            className="p-3 rounded-full transition-colors"
+            style={{ color: 'var(--text-muted)' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--border-light)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >
+            <Paperclip className="w-5 h-5" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsGifPickerOpen(!isGifPickerOpen)}
+            className="px-3 py-1 rounded-full flex items-center justify-center transition-all text-xs font-extrabold select-none shrink-0"
+            style={{
+              color: isGifPickerOpen ? 'var(--primary)' : 'var(--text-muted)',
+              background: isGifPickerOpen ? 'var(--primary-light)' : 'transparent',
+              border: `1.5px solid ${isGifPickerOpen ? 'var(--primary)' : 'var(--border)'}`,
+              cursor: 'pointer',
+              letterSpacing: '0.04em',
+              fontFamily: 'var(--font-jakarta)',
+              height: '32px'
+            }}
+          >
+            GIF
+          </button>
+        </div>
 
         <input
           ref={inputRef}
@@ -232,8 +434,6 @@ const MessageInputBar = React.memo(({ onSendMessage, pendingMedia, uploading, fi
   );
 });
 MessageInputBar.displayName = 'MessageInputBar';
-
-
 export default function ChatPage() {
   const router = useRouter();
   const {
@@ -1445,6 +1645,38 @@ export default function ChatPage() {
     }
 
     setPendingMedia(null);
+    setReplyingTo(null);
+    if (!activeFriend.isGroup) {
+      emitTyping(activeFriend.id, false);
+    }
+    return true;
+  };
+
+  const onSendGif = async (gifUrl) => {
+    setSendError('');
+    let result = null;
+    if (activeFriend.isGroup) {
+      result = await sendGroupMessage(
+        activeFriend.id,
+        '',
+        gifUrl,
+        'image',
+        replyingTo ? { id: replyingTo.id, text: replyingTo.text, senderId: replyingTo.senderId } : null
+      );
+    } else {
+      result = await sendMessage(
+        activeFriend.id,
+        '',
+        gifUrl,
+        'image',
+        replyingTo ? { id: replyingTo.id, text: replyingTo.text, senderId: replyingTo.senderId } : null
+      );
+    }
+    if (!result) {
+      setSendError('Failed to send GIF. IndexedDB may be full.');
+      setTimeout(() => setSendError(''), 4000);
+      return false;
+    }
     setReplyingTo(null);
     if (!activeFriend.isGroup) {
       emitTyping(activeFriend.id, false);
@@ -3304,6 +3536,9 @@ export default function ChatPage() {
                 handleFileUpload={handleFileUpload}
                 emitTyping={emitTyping}
                 activeFriendId={activeFriend.id}
+                replyingTo={replyingTo}
+                onCancelReply={() => setReplyingTo(null)}
+                onSendGif={onSendGif}
               />
             </div>
           </>
