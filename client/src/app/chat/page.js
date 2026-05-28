@@ -1772,113 +1772,187 @@ export default function ChatPage() {
             </div>
           )}
           {/* ── PROFILE TAB ── */}
-          {/* ── PROFILE TAB ── */}
           {activeTab === 'profile' && (
-            <div className="pb-8 space-y-6" style={{ background: 'var(--surface)' }}>
-              {/* Premium Gradient Banner */}
-              <div 
-                className="relative h-28 shrink-0 rounded-b-2xl shadow-sm overflow-hidden" 
-                style={{ 
-                  background: 'linear-gradient(135deg, var(--primary) 0%, #a5b4fc 50%, #f472b6 100%)' 
+            <div className="pb-8" style={{ background: 'var(--bg)' }}>
+              {/* ── Hero Banner ── */}
+              <div
+                className="relative shrink-0 overflow-hidden"
+                style={{
+                  height: '140px',
+                  background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 40%, #ec4899 80%, #f97316 100%)',
                 }}
               >
-                {/* Background decorative glass orb */}
-                <div className="absolute -top-10 -left-10 w-28 h-28 rounded-full bg-white/10 blur-xl" />
-                <div className="absolute top-3 right-3">
-                  <button
-                    onClick={() => { setSettingsTab('profile'); setShowSettings(true); }}
-                    className="p-2 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-full text-white transition-all duration-200 border-none cursor-pointer flex items-center justify-center"
-                    title="Edit Profile Settings"
-                  >
-                    <Settings className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Profile Card & Avatar */}
-              <div className="text-center px-4 pb-2">
-                <label
-                  className="w-24 h-24 rounded-full border-4 flex items-center justify-center overflow-hidden shrink-0 relative group cursor-pointer hover:opacity-95 active:scale-95 transition-all mx-auto -mt-12 shadow-md"
+                {/* Decorative orbs */}
+                <div style={{ position: 'absolute', top: '-30px', left: '-20px', width: '120px', height: '120px', borderRadius: '50%', background: 'rgba(255,255,255,0.10)', filter: 'blur(20px)' }} />
+                <div style={{ position: 'absolute', bottom: '-20px', right: '30px', width: '90px', height: '90px', borderRadius: '50%', background: 'rgba(255,255,255,0.08)', filter: 'blur(16px)' }} />
+                <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', width: '160px', height: '60px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)', filter: 'blur(12px)' }} />
+                {/* Settings button */}
+                <button
+                  onClick={() => { setSettingsTab('profile'); setShowSettings(true); }}
+                  className="absolute top-3 right-3 flex items-center gap-1.5 text-white border-none cursor-pointer transition-all hover:scale-105 active:scale-95"
                   style={{
-                    background: getAvatarColor(currentUser?.username),
-                    borderColor: 'var(--surface)',
+                    background: 'rgba(255,255,255,0.18)',
+                    backdropFilter: 'blur(10px)',
+                    borderRadius: '20px',
+                    padding: '6px 12px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    fontFamily: 'var(--font-jakarta)',
+                    border: '1px solid rgba(255,255,255,0.25)',
                   }}
-                  title="Click to change profile picture"
+                  title="Edit Profile Settings"
                 >
-                  <span className="text-2xl font-bold text-white uppercase">{currentUser?.username?.slice(0, 2)}</span>
-                  {currentUser?.avatar?.startsWith('http') && (
-                    <img src={optimizeAvatarUrl(currentUser.avatar)} alt="avatar" className="w-full h-full object-cover" style={{ position: 'absolute', top: 0, left: 0 }} onError={(e) => { e.target.style.display = 'none'; }} />
-                  )}
-                  {/* Camera overlay icon */}
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-opacity text-white">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                    </svg>
-                  </div>
-                  {avatarUploading && (
-                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                      <RefreshCw className="w-5 h-5 text-white animate-spin" />
+                  <Settings className="w-3.5 h-3.5" />
+                  <span>Edit</span>
+                </button>
+              </div>
+
+              {/* ── Avatar + Identity ── */}
+              <div
+                style={{
+                  background: 'var(--surface)',
+                  borderRadius: '0 0 24px 24px',
+                  paddingBottom: '20px',
+                  marginBottom: '12px',
+                  boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+                }}
+              >
+                {/* Avatar */}
+                <div className="flex flex-col items-center" style={{ marginTop: '-44px' }}>
+                  <label
+                    className="relative group cursor-pointer"
+                    style={{ display: 'inline-block' }}
+                    title="Click to change profile picture"
+                  >
+                    {/* Glow ring */}
+                    <div style={{
+                      position: 'absolute',
+                      inset: '-4px',
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #6366f1, #ec4899, #f97316)',
+                      opacity: 0.7,
+                      filter: 'blur(4px)',
+                      zIndex: 0,
+                    }} />
+                    <div
+                      style={{
+                        width: '88px',
+                        height: '88px',
+                        borderRadius: '50%',
+                        border: '3px solid var(--surface)',
+                        background: getAvatarColor(currentUser?.username),
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        overflow: 'hidden',
+                        position: 'relative',
+                        zIndex: 1,
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.18)',
+                      }}
+                    >
+                      <span className="text-2xl font-bold text-white uppercase" style={{ fontFamily: 'var(--font-jakarta)', pointerEvents: 'none' }}>
+                        {currentUser?.username?.slice(0, 2)}
+                      </span>
+                      {currentUser?.avatar?.startsWith('http') && (
+                        <img
+                          src={optimizeAvatarUrl(currentUser.avatar)}
+                          alt="avatar"
+                          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                          onError={(e) => { e.target.style.display = 'none'; }}
+                        />
+                      )}
+                      {/* Camera overlay */}
+                      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity" style={{ background: 'rgba(0,0,0,0.45)', borderRadius: '50%' }}>
+                        <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                        </svg>
+                      </div>
+                      {avatarUploading && (
+                        <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)', borderRadius: '50%' }}>
+                          <RefreshCw className="w-5 h-5 text-white animate-spin" />
+                        </div>
+                      )}
                     </div>
-                  )}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleAvatarUpload}
-                    className="hidden"
-                    disabled={avatarUploading}
-                  />
-                </label>
+                    <input type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" disabled={avatarUploading} />
+                  </label>
 
-                <h2 className="text-lg font-bold mt-3 flex items-center justify-center gap-1.5" style={{ color: 'var(--text)', fontFamily: 'var(--font-jakarta)' }}>
-                  {renderUsername(currentUser?.username)}
-                </h2>
-                
-                {/* Active Status Badge */}
-                <div className="flex items-center justify-center gap-1.5 mt-1.5">
-                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                  <span className="text-[10px] uppercase font-bold tracking-wider" style={{ color: 'var(--online)' }}>
-                    Active Status: Online
-                  </span>
+                  {/* Name + handle */}
+                  <h2
+                    className="flex items-center gap-1.5 mt-3"
+                    style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-jakarta)', lineHeight: 1.2 }}
+                  >
+                    {renderUsername(currentUser?.username)}
+                  </h2>
+                  <p style={{ fontSize: '12px', color: 'var(--text-subtle)', marginTop: '2px', fontWeight: 500 }}>
+                    @{currentUser?.username?.toLowerCase()}
+                  </p>
+
+                  {/* Status pill */}
+                  <div
+                    className="flex items-center gap-1.5 mt-2"
+                    style={{
+                      background: 'rgba(52,168,83,0.10)',
+                      border: '1px solid rgba(52,168,83,0.25)',
+                      borderRadius: '20px',
+                      padding: '3px 10px',
+                    }}
+                  >
+                    <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#34a853', display: 'inline-block', boxShadow: '0 0 0 2px rgba(52,168,83,0.3)' }} />
+                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#34a853', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Online</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Statistics Grid */}
-              <div className="grid grid-cols-3 gap-3 px-4 py-1">
-                <div className="p-3.5 rounded-2xl flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-light)' }}>
-                  <span className="text-base font-bold" style={{ color: 'var(--text)' }}>{dbFriends.length}</span>
-                  <span className="text-[9px] uppercase font-bold tracking-wider mt-0.5" style={{ color: 'var(--text-subtle)' }}>Friends</span>
+              {/* ── Stats Row ── */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', padding: '0 14px', marginBottom: '12px' }}>
+                {/* Friends */}
+                <div style={{ borderRadius: '18px', padding: '14px 10px', textAlign: 'center', background: 'var(--surface)', border: '1px solid var(--border-light)', boxShadow: '0 1px 6px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                  <div style={{ width: '30px', height: '30px', borderRadius: '10px', background: 'rgba(99,102,241,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '2px' }}>
+                    <Users style={{ width: '15px', height: '15px', color: '#6366f1' }} />
+                  </div>
+                  <span style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text)', fontFamily: 'var(--font-jakarta)', lineHeight: 1 }}>{dbFriends.length}</span>
+                  <span style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Friends</span>
                 </div>
-                <div className="p-3.5 rounded-2xl flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-light)' }}>
-                  <span className="text-base font-bold" style={{ color: 'var(--text)' }}>{dbChats.length}</span>
-                  <span className="text-[9px] uppercase font-bold tracking-wider mt-0.5" style={{ color: 'var(--text-subtle)' }}>Chats</span>
+                {/* Chats */}
+                <div style={{ borderRadius: '18px', padding: '14px 10px', textAlign: 'center', background: 'var(--surface)', border: '1px solid var(--border-light)', boxShadow: '0 1px 6px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                  <div style={{ width: '30px', height: '30px', borderRadius: '10px', background: 'rgba(236,72,153,0.10)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '2px' }}>
+                    <MessageSquare style={{ width: '15px', height: '15px', color: '#ec4899' }} />
+                  </div>
+                  <span style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text)', fontFamily: 'var(--font-jakarta)', lineHeight: 1 }}>{dbChats.length}</span>
+                  <span style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Chats</span>
                 </div>
-                <div className="p-3.5 rounded-2xl flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-light)' }}>
-                  <span className="text-xs font-bold truncate w-full" style={{ color: 'var(--text)' }}>
-                    {currentUser?.createdAt ? new Date(currentUser.createdAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : 'May 2026'}
+                {/* Joined */}
+                <div style={{ borderRadius: '18px', padding: '14px 10px', textAlign: 'center', background: 'var(--surface)', border: '1px solid var(--border-light)', boxShadow: '0 1px 6px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                  <div style={{ width: '30px', height: '30px', borderRadius: '10px', background: 'rgba(251,146,60,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '2px' }}>
+                    <Sparkles style={{ width: '15px', height: '15px', color: '#f97316' }} />
+                  </div>
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text)', fontFamily: 'var(--font-jakarta)', lineHeight: 1 }}>
+                    {currentUser?.createdAt ? new Date(currentUser.createdAt).toLocaleDateString(undefined, { month: 'short', year: '2-digit' }) : 'May 26'}
                   </span>
-                  <span className="text-[9px] uppercase font-bold tracking-wider mt-1" style={{ color: 'var(--text-subtle)' }}>Joined</span>
+                  <span style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Joined</span>
                 </div>
               </div>
 
-              {/* Biography Card */}
-              <div className="px-4 py-1">
-                <div className="p-4.5 rounded-2xl shadow-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-light)' }}>
-                  <div className="flex items-center justify-between mb-2.5">
-                    <span className="text-[10px] uppercase font-bold tracking-wider" style={{ color: 'var(--text-muted)' }}>Biography</span>
+              {/* ── Biography Card ── */}
+              <div style={{ padding: '0 14px', marginBottom: '10px' }}>
+                <div style={{ background: 'var(--surface)', borderRadius: '18px', border: '1px solid var(--border-light)', overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.05)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '26px', height: '26px', borderRadius: '8px', background: 'rgba(99,102,241,0.10)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Info style={{ width: '13px', height: '13px', color: '#6366f1' }} />
+                      </div>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: 'var(--font-jakarta)' }}>Bio</span>
+                    </div>
                     {!isEditingBio ? (
                       <button
                         onClick={() => { setEditBio(currentUser?.bio || ''); setIsEditingBio(true); }}
-                        className="text-[10px] font-bold transition-all border-none bg-transparent cursor-pointer hover:underline"
-                        style={{ color: 'var(--primary)' }}
+                        style={{ fontSize: '11px', fontWeight: 700, color: 'var(--primary)', background: 'var(--primary-light)', border: 'none', borderRadius: '20px', padding: '4px 12px', cursor: 'pointer', fontFamily: 'var(--font-jakarta)' }}
                       >
                         Edit
                       </button>
                     ) : (
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setIsEditingBio(false)}
-                          className="text-[10px] font-bold text-slate-400 border-none bg-transparent cursor-pointer"
-                        >
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button onClick={() => setIsEditingBio(false)} style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-subtle)', background: 'var(--border-light)', border: 'none', borderRadius: '20px', padding: '4px 10px', cursor: 'pointer' }}>
                           Cancel
                         </button>
                         <button
@@ -1888,173 +1962,170 @@ export default function ChatPage() {
                             try {
                               const response = await fetch(`${BACKEND_URL}/api/users/profile`, {
                                 method: 'PUT',
-                                headers: {
-                                  'Content-Type': 'application/json',
-                                  'Authorization': `Bearer ${token}`
-                                },
-                                  body: JSON.stringify({ bio: editBio })
+                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                                body: JSON.stringify({ bio: editBio })
                               });
                               if (response.ok) {
                                 const data = await response.json();
                                 setCurrentUser(data);
                                 localStorage.setItem('chapp_user', JSON.stringify(data));
                                 setIsEditingBio(false);
-                                confetti({
-                                  particleCount: 35,
-                                  spread: 25,
-                                  origin: { y: 0.8 },
-                                  colors: ['#818cf8', '#f472b6', '#6366f1']
-                                });
+                                confetti({ particleCount: 35, spread: 25, origin: { y: 0.8 }, colors: ['#818cf8', '#f472b6', '#6366f1'] });
                               }
-                            } catch (err) {
-                              console.error(err);
-                            }
+                            } catch (err) { console.error(err); }
                           }}
-                          className="text-[10px] font-bold border-none bg-transparent cursor-pointer"
-                          style={{ color: 'var(--primary)' }}
+                          style={{ fontSize: '11px', fontWeight: 700, color: '#fff', background: 'var(--primary)', border: 'none', borderRadius: '20px', padding: '4px 12px', cursor: 'pointer' }}
                         >
                           Save
                         </button>
                       </div>
                     )}
                   </div>
-                  {!isEditingBio ? (
-                    <p className="text-xs leading-relaxed" style={{ color: 'var(--text-muted)', whiteSpace: 'pre-wrap' }}>
-                      {currentUser?.bio || 'Hey there! I am using Chapp.'}
-                    </p>
-                  ) : (
-                    <textarea
-                      className="w-full text-xs p-2 rounded-xl border focus:outline-none resize-none font-sans"
-                      style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}
-                      rows={3}
-                      value={editBio}
-                      onChange={e => setEditBio(e.target.value)}
-                      placeholder="Write a short biography about yourself..."
-                    />
-                  )}
+                  <div style={{ height: '1px', background: 'var(--border-light)', margin: '0 16px' }} />
+                  <div style={{ padding: '12px 16px 14px' }}>
+                    {!isEditingBio ? (
+                      <p style={{ fontSize: '13px', color: currentUser?.bio ? 'var(--text-muted)' : 'var(--text-subtle)', lineHeight: '1.6', whiteSpace: 'pre-wrap', fontStyle: currentUser?.bio ? 'normal' : 'italic' }}>
+                        {currentUser?.bio || 'Hey there! I am using Chapp.'}
+                      </p>
+                    ) : (
+                      <textarea
+                        style={{ width: '100%', fontSize: '13px', padding: '10px 12px', borderRadius: '12px', border: '1.5px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)', resize: 'none', fontFamily: 'var(--font-sans)', outline: 'none', lineHeight: '1.5' }}
+                        rows={3}
+                        value={editBio}
+                        onChange={e => setEditBio(e.target.value)}
+                        placeholder="Write something about yourself..."
+                        onFocus={e => { e.target.style.borderColor = 'var(--primary)'; e.target.style.boxShadow = '0 0 0 3px rgba(26,115,232,0.12)'; }}
+                        onBlur={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.boxShadow = 'none'; }}
+                      />
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* Recovery Email Card */}
-              <div className="px-4 py-1">
-                <div className="p-4.5 rounded-2xl shadow-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-light)' }}>
-                  <div className="flex items-center justify-between mb-2.5">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] uppercase font-bold tracking-wider" style={{ color: 'var(--text-muted)' }}>Recovery Email</span>
+              {/* ── Recovery Email Card ── */}
+              <div style={{ padding: '0 14px', marginBottom: '10px' }}>
+                <div style={{ background: 'var(--surface)', borderRadius: '18px', border: '1px solid var(--border-light)', overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.05)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '26px', height: '26px', borderRadius: '8px', background: currentUser?.email ? 'rgba(52,168,83,0.12)' : 'rgba(251,146,60,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Mail style={{ width: '13px', height: '13px', color: currentUser?.email ? '#34a853' : '#f97316' }} />
+                      </div>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: 'var(--font-jakarta)' }}>Recovery Email</span>
                       {currentUser?.email ? (
-                        <span className="text-[8px] px-2 py-0.5 rounded-full font-bold bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400">
-                          Secured
-                        </span>
+                        <span style={{ fontSize: '9px', fontWeight: 700, color: '#34a853', background: 'rgba(52,168,83,0.10)', border: '1px solid rgba(52,168,83,0.20)', borderRadius: '20px', padding: '2px 8px' }}>✓ Secured</span>
                       ) : (
-                        <span className="text-[8px] px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 animate-pulse">
-                          Setup Recovery
-                        </span>
+                        <span style={{ fontSize: '9px', fontWeight: 700, color: '#f97316', background: 'rgba(251,146,60,0.10)', border: '1px solid rgba(251,146,60,0.25)', borderRadius: '20px', padding: '2px 8px' }}>! Setup</span>
                       )}
                     </div>
                     {!isEditingEmail ? (
                       <button
                         onClick={() => { setEditEmailVal(currentUser?.email || ''); setIsEditingEmail(true); setEmailEditError(''); }}
-                        className="text-[10px] font-bold transition-all border-none bg-transparent cursor-pointer hover:underline"
-                        style={{ color: 'var(--primary)' }}
+                        style={{ fontSize: '11px', fontWeight: 700, color: 'var(--primary)', background: 'var(--primary-light)', border: 'none', borderRadius: '20px', padding: '4px 12px', cursor: 'pointer', fontFamily: 'var(--font-jakarta)' }}
                       >
-                        {currentUser?.email ? 'Change' : 'Set Email'}
+                        {currentUser?.email ? 'Change' : 'Set'}
                       </button>
                     ) : (
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => { setIsEditingEmail(false); setEmailEditError(''); }}
-                          className="text-[10px] font-bold text-slate-400 border-none bg-transparent cursor-pointer"
-                        >
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button onClick={() => { setIsEditingEmail(false); setEmailEditError(''); }} style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-subtle)', background: 'var(--border-light)', border: 'none', borderRadius: '20px', padding: '4px 10px', cursor: 'pointer' }}>
                           Cancel
                         </button>
                         <button
                           onClick={async () => {
                             const token = localStorage.getItem('chapp_token');
                             if (!token) return;
-                            
                             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
                             if (editEmailVal.trim() && !emailRegex.test(editEmailVal.trim().toLowerCase())) {
                               setEmailEditError('Invalid email format.');
                               return;
                             }
-                            
                             try {
                               const response = await fetch(`${BACKEND_URL}/api/users/profile`, {
                                 method: 'PUT',
-                                headers: {
-                                  'Content-Type': 'application/json',
-                                  'Authorization': `Bearer ${token}`
-                                },
+                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                                 body: JSON.stringify({ email: editEmailVal.trim() || null })
                               });
-                              
                               const data = await response.json();
                               if (!response.ok) throw new Error(data.error || 'Failed to update email.');
-                              
                               setCurrentUser(data);
                               localStorage.setItem('chapp_user', JSON.stringify(data));
                               setIsEditingEmail(false);
                               setEmailEditError('');
-                              confetti({
-                                particleCount: 30,
-                                spread: 20,
-                                origin: { y: 0.8 }
-                              });
-                            } catch (err) {
-                              setEmailEditError(err.message);
-                            }
+                              confetti({ particleCount: 30, spread: 20, origin: { y: 0.8 } });
+                            } catch (err) { setEmailEditError(err.message); }
                           }}
-                          className="text-[10px] font-bold border-none bg-transparent cursor-pointer"
-                          style={{ color: 'var(--primary)' }}
+                          style={{ fontSize: '11px', fontWeight: 700, color: '#fff', background: 'var(--primary)', border: 'none', borderRadius: '20px', padding: '4px 12px', cursor: 'pointer' }}
                         >
                           Save
                         </button>
                       </div>
                     )}
                   </div>
-                  
-                  {emailEditError && (
-                    <p className="text-[10px] mb-2 font-semibold text-red-500">{emailEditError}</p>
-                  )}
-                  
-                  {!isEditingEmail ? (
-                    <p className="text-xs font-mono" style={{ color: currentUser?.email ? 'var(--text)' : 'var(--text-subtle)' }}>
-                      {currentUser?.email || 'No recovery email set.'}
-                    </p>
-                  ) : (
-                    <input
-                      type="email"
-                      placeholder="Enter recovery email (e.g. gmail)"
-                      value={editEmailVal}
-                      onChange={e => setEditEmailVal(e.target.value)}
-                      className="field-input py-1.5 px-3 text-xs w-full"
-                      style={{ background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--border)' }}
-                    />
-                  )}
-                  
-                  <p className="text-[10px] mt-2.5 leading-normal" style={{ color: 'var(--text-subtle)' }}>
-                    Your recovery email helps restore access to your account and notifications.
-                  </p>
+                  <div style={{ height: '1px', background: 'var(--border-light)', margin: '0 16px' }} />
+                  <div style={{ padding: '12px 16px 14px' }}>
+                    {emailEditError && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '10px', padding: '6px 10px', marginBottom: '10px' }}>
+                        <AlertCircle style={{ width: '12px', height: '12px', color: '#ef4444', flexShrink: 0 }} />
+                        <p style={{ fontSize: '11px', fontWeight: 600, color: '#ef4444', margin: 0 }}>{emailEditError}</p>
+                      </div>
+                    )}
+                    {!isEditingEmail ? (
+                      <p style={{ fontSize: '13px', color: currentUser?.email ? 'var(--text)' : 'var(--text-subtle)', fontStyle: currentUser?.email ? 'normal' : 'italic' }}>
+                        {currentUser?.email || 'No recovery email set.'}
+                      </p>
+                    ) : (
+                      <input
+                        type="email"
+                        placeholder="e.g. you@gmail.com"
+                        value={editEmailVal}
+                        onChange={e => setEditEmailVal(e.target.value)}
+                        style={{ width: '100%', fontSize: '13px', padding: '10px 12px', borderRadius: '12px', border: '1.5px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)', fontFamily: 'var(--font-sans)', outline: 'none' }}
+                        onFocus={e => { e.target.style.borderColor = 'var(--primary)'; e.target.style.boxShadow = '0 0 0 3px rgba(26,115,232,0.12)'; }}
+                        onBlur={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.boxShadow = 'none'; }}
+                      />
+                    )}
+                    {!isEditingEmail && (
+                      <p style={{ fontSize: '11px', marginTop: '8px', color: 'var(--text-subtle)', lineHeight: '1.5' }}>
+                        Used to restore access to your account if you lose your password.
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* Log Out */}
-              <div className="px-4 pt-4 pb-8">
+              {/* ── Sign Out ── */}
+              <div style={{ padding: '6px 14px 24px' }}>
                 <button
                   onClick={() => {
                     localStorage.removeItem('chapp_token');
                     localStorage.removeItem('chapp_user');
                     router.push('/login');
                   }}
-                  className="w-full py-3 rounded-2xl border text-xs font-bold flex items-center justify-center gap-2 transition-all hover:bg-rose-50/10 hover:text-rose-500 cursor-pointer"
-                  style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+                  style={{
+                    width: '100%',
+                    padding: '13px',
+                    borderRadius: '18px',
+                    border: '1.5px solid rgba(239,68,68,0.25)',
+                    background: 'rgba(239,68,68,0.05)',
+                    color: '#ef4444',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    fontFamily: 'var(--font-jakarta)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.10)'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.4)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.05)'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.25)'; }}
                 >
-                  <LogOut className="w-4 h-4 text-rose-500" />
-                  <span>Log Out</span>
+                  <LogOut className="w-4 h-4" />
+                  Sign Out
                 </button>
               </div>
             </div>
-          )}
+          )}          )}
         </div>
 
         {/* Bottom Navigation */}
