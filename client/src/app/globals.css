@@ -40,6 +40,10 @@
   --r-lg: 18px;
   --r-xl: 24px;
   --r-full: 9999px;
+
+  /* Fonts */
+  --font-sans:    'Inter', system-ui, sans-serif;
+  --font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
 }
 
 .dark-theme {
@@ -73,11 +77,6 @@
 
   /* Status */
   --online:          #10b981;
-}
-
-@theme {
-  --font-sans:    'Inter', system-ui, sans-serif;
-  --font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
 }
 
 /* ─── Reset ─────────────────────────────────────────────────── */
